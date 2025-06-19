@@ -1,0 +1,2 @@
+# glma
+Welcome to the glma repository! We created this for a hackathon, and the goal of our project is to create an ai agent that can help document codebases in a way that is easy to understand and navigate. This agent will be able to analyze code, generate documentation, and provide insights into the structure and functionality of the codebase. Ultimately this would help the process of migrating legacy codebases to modern frameworks and languages. For that reason, we are currently exploring the linux kernel codebase as a test case for our agent.
