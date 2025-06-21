@@ -1309,6 +1309,7 @@ dependencies = [
     { name = "pyarrow" },
     { name = "python-dotenv" },
     { name = "yfiles-jupyter-graphs" },
+    { name = "yfiles-jupyter-graphs-for-kuzu" },
 ]
 
 [package.metadata]
@@ -1320,6 +1321,7 @@ requires-dist = [
     { name = "pyarrow", specifier = ">=20.0.0" },
     { name = "python-dotenv", specifier = ">=1.1.0" },
     { name = "yfiles-jupyter-graphs", specifier = ">=1.10.6" },
+    { name = "yfiles-jupyter-graphs-for-kuzu", specifier = ">=0.0.4" },
 ]
 
 [[package]]
@@ -1476,4 +1478,16 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/11/ce/83bd3dd0d1b6abb6316cf9ab0dd7213974167cee31f30ef5c4e492690b69/yfiles_jupyter_graphs-1.10.7.tar.gz", hash = "sha256:625b2ea893b8fcae12f6772a1ada7a66544b6969cb78f56866d4de79cbc979d8", size = 10709928, upload-time = "2025-06-11T12:40:26.375Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/92/f8/29fc7bf0f0c6f0aaaddc245bc6637bfaecc47301ff8ee5c2c2917b579b10/yfiles_jupyter_graphs-1.10.7-py3-none-any.whl", hash = "sha256:300dbca7e1743f0f033680aad506ae9dc4300a8e7733b86abf2c13393d4b7dd3", size = 15709557, upload-time = "2025-06-11T12:40:20.583Z" },
+]
+
+[[package]]
+name = "yfiles-jupyter-graphs-for-kuzu"
+version = "0.0.4"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "yfiles-jupyter-graphs" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/2a/32/aa9941a4c2ac935cd66f7a8bb3eeb5c7b1d3f097a6f1fbfc359c4a18815c/yfiles_jupyter_graphs_for_kuzu-0.0.4.tar.gz", hash = "sha256:fd03f42b902587398dbd65bc17aa4ff94f7a856748274e83d5001a5b10f9db87", size = 16521, upload-time = "2025-04-23T07:06:26.423Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/45/5d/5c8d30d08e74b25806eba8f8db560377109e701ffc0bdcb44c4b4bea4d46/yfiles_jupyter_graphs_for_kuzu-0.0.4-py3-none-any.whl", hash = "sha256:2853b39d50b072f964fb03b84c1ff8d0b14f5360d7a4792c9d2f09dedbf6708b", size = 13941, upload-time = "2025-04-23T07:06:25.017Z" },
 ]
