@@ -12,7 +12,7 @@ Build a CLI tool that indexes codebases into a queryable graph database with com
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 1: Core Indexing Pipeline** - Parse repos with tree-sitter, extract chunks, store in LanceDB + markdown
+- [x] **Phase 1: Core Indexing Pipeline** - Parse repos with tree-sitter, extract chunks, store in LanceDB + markdown
 - [ ] **Phase 2: Relationship Extraction** - Extract calls, imports, and inheritance relationships from ASTs
 - [ ] **Phase 3: Query Tool & Notebook Compaction** - CLI query interface, Jupyter compaction, layered markdown output
 - [ ] **Phase 4: File Watching & Air-Gapped Export** - Live sync, incremental updates, static markdown export
@@ -32,10 +32,10 @@ Decimal phases appear between their surrounding integers in numeric order.
 **Plans**: TBD
 
 Plans:
-- [ ] 01-01: Project scaffolding, CLI entry point, LanceDB setup
-- [ ] 01-02: Language detection, tree-sitter parsing pipeline, chunk extraction
-- [ ] 01-03: Comment attachment, markdown output, progress display
-- [ ] 01-04: Content hashing, incremental re-indexing, integration testing
+- [x] 01-01: Project scaffolding, CLI entry point, Ladybug store
+- [x] 01-02: Language detection, tree-sitter parsing pipeline, chunk extraction
+- [x] 01-03: Comment attachment, markdown output, progress display
+- [x] 01-04: Content hashing, incremental re-indexing, integration testing
 
 ### Phase 2: Relationship Extraction
 **Goal**: The index contains structural relationships (function calls, imports, inheritance) that agents can follow to understand how code connects across files
@@ -93,7 +93,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Core Indexing Pipeline | 0/4 | Not started | - |
+| 1. Core Indexing Pipeline | 4/4 | Complete | 2026-04-08 |
 | 2. Relationship Extraction | 0/3 | Not started | - |
 | 3. Query Tool & Notebook Compaction | 0/3 | Not started | - |
 | 4. File Watching & Air-Gapped Export | 0/2 | Not started | - |
