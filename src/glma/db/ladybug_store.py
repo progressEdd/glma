@@ -60,7 +60,13 @@ class LadybugStore:
         self.conn.execute(self.SCHEMA_CONTAINS)
 
     def upsert_file(self, record: FileRecord) -> None:
-        """Insert or update a file record. Uses delete+re-insert pattern."""
+        """Insert or update a file record. Uses detach delete+re-insert pattern."""
+        # First delete chunks and their edges for this file
+        self.conn.execute(
+            "MATCH (c:Chunk {file_path: $fp}) DETACH DELETE c",
+            {"fp": record.path},
+        )
+        # Then delete the file node (now safe since edges are gone)
         self.conn.execute(
             "MATCH (f:File {path: $path}) DELETE f",
             {"path": record.path},
