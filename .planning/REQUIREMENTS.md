@@ -115,53 +115,53 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 | ----------- | ----- | ------ |
-| IDXC-01 | - | Pending |
-| IDXC-02 | - | Pending |
-| IDXC-03 | - | Pending |
-| IDXC-04 | - | Pending |
-| IDXC-05 | - | Pending |
-| IDXC-06 | - | Pending |
-| IDXC-07 | - | Pending |
-| IDXC-08 | - | Pending |
-| IDXC-09 | - | Pending |
-| IDXC-10 | - | Pending |
-| RELS-01 | - | Pending |
-| RELS-02 | - | Pending |
-| RELS-03 | - | Pending |
-| RELS-04 | - | Pending |
-| RELS-05 | - | Pending |
-| RELS-06 | - | Pending |
-| RELS-07 | - | Pending |
-| STOR-01 | - | Pending |
-| STOR-02 | - | Pending |
-| STOR-03 | - | Pending |
-| STOR-04 | - | Pending |
-| STOR-05 | - | Pending |
-| QURY-01 | - | Pending |
-| QURY-02 | - | Pending |
-| QURY-03 | - | Pending |
-| QURY-04 | - | Pending |
-| QURY-05 | - | Pending |
-| JNTP-01 | - | Pending |
-| JNTP-02 | - | Pending |
-| JNTP-03 | - | Pending |
-| JNTP-04 | - | Pending |
-| CLIF-01 | - | Pending |
-| CLIF-02 | - | Pending |
-| CLIF-03 | - | Pending |
-| CLIF-04 | - | Pending |
-| CLIF-05 | - | Pending |
-| WTCH-01 | - | Pending |
-| WTCH-02 | - | Pending |
-| WTCH-03 | - | Pending |
-| AIRG-01 | - | Pending |
-| AIRG-02 | - | Pending |
-| AIRG-03 | - | Pending |
+| IDXC-01 | Phase 1 | Pending |
+| IDXC-02 | Phase 1 | Pending |
+| IDXC-03 | Phase 1 | Pending |
+| IDXC-04 | Phase 1 | Pending |
+| IDXC-05 | Phase 1 | Pending |
+| IDXC-06 | Phase 1 | Pending |
+| IDXC-07 | Phase 1 | Pending |
+| IDXC-08 | Phase 1 | Pending |
+| IDXC-09 | Phase 1 | Pending |
+| IDXC-10 | Phase 1 | Pending |
+| RELS-01 | Phase 2 | Pending |
+| RELS-02 | Phase 2 | Pending |
+| RELS-03 | Phase 2 | Pending |
+| RELS-04 | Phase 2 | Pending |
+| RELS-05 | Phase 2 | Pending |
+| RELS-06 | Phase 2 | Pending |
+| RELS-07 | Phase 2 | Pending |
+| STOR-01 | Phase 1 | Pending |
+| STOR-02 | Phase 2 | Pending |
+| STOR-03 | Phase 1 | Pending |
+| STOR-04 | Phase 2 | Pending |
+| STOR-05 | Phase 1 | Pending |
+| QURY-01 | Phase 3 | Pending |
+| QURY-02 | Phase 3 | Pending |
+| QURY-03 | Phase 3 | Pending |
+| QURY-04 | Phase 3 | Pending |
+| QURY-05 | Phase 3 | Pending |
+| JNTP-01 | Phase 3 | Pending |
+| JNTP-02 | Phase 3 | Pending |
+| JNTP-03 | Phase 3 | Pending |
+| JNTP-04 | Phase 3 | Pending |
+| CLIF-01 | Phase 1 | Pending |
+| CLIF-02 | Phase 3 | Pending |
+| CLIF-03 | Phase 4 | Pending |
+| CLIF-04 | Phase 4 | Pending |
+| CLIF-05 | Phase 3 | Pending |
+| WTCH-01 | Phase 4 | Pending |
+| WTCH-02 | Phase 4 | Pending |
+| WTCH-03 | Phase 4 | Pending |
+| AIRG-01 | Phase 4 | Pending |
+| AIRG-02 | Phase 4 | Pending |
+| AIRG-03 | Phase 4 | Pending |
 
 **Coverage:**
 - v1 requirements: 42 total
-- Mapped to phases: 0
-- Unmapped: 42 ⚠️
+- Mapped to phases: 42
+- Unmapped: 0 ✓
 
 ---
 *Requirements defined: 2026-04-08*
