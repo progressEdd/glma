@@ -42,7 +42,7 @@ Progress: [░░░░░░░░░░] 0%
 Decisions are logged in PROJECT.md Key Decisions table.
 Recent decisions affecting current work:
 
-- [Init]: LanceDB chosen over Ladybug/Kuzu — unifies vector search + metadata storage, avoids running two databases
+- [Init]: Ladybug (ex-Kuzu, package: `real_ladybug`) chosen for storage — graph relationships, vector indices, and full-text search in one embedded DB. Replaced prior LanceDB decision.
 - [Init]: CLI-first design (not MCP server) — works with any agent that can run shell commands
 - [Init]: Local embeddings (sentence-transformers) for air-gapped compatibility
 - [Init]: Comment attachment solved as AST post-processing pass

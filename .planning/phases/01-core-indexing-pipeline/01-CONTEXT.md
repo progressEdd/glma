@@ -44,7 +44,7 @@ This phase delivers: CLI entry point, directory walking, language detection, tre
 ### Agent's Discretion
 - Exact `rich` vs `tqdm` choice (whichever integrates better with the CLI framework)
 - Specific `.glma.toml` config key names and structure
-- LanceDB table schema details beyond required fields (id, file_path, chunk_type, name, content, parent_id, summary, metadata)
+- Ladybug (graph) schema details — node/edge table definitions, Cypher query patterns
 - Error message wording and formatting
 - Exact comment attachment heuristic details (AST post-processing pass)
 
@@ -62,12 +62,15 @@ This phase delivers: CLI entry point, directory walking, language detection, tre
 - `.planning/codebase/STACK.md` - Technology stack, key dependencies (tree-sitter, Python 3.13, uv)
 
 ### Reference implementation
-- `02-worktrees/linux_kernel/develop.ipynb` - Working tree-sitter parsing pipeline, chunk extraction patterns, Kuzu graph DB usage (reference for tree-sitter approach, NOT for storage — LanceDB replaces Kuzu)
+- `02-worktrees/linux_kernel/develop.ipynb` - Working tree-sitter parsing pipeline, chunk extraction patterns, Kuzu graph DB usage (directly reusable — Ladybug is Kuzu's successor)
 - `02-worktrees/linux_kernel/pyproject.toml` - Existing dependency versions for tree-sitter, tree-sitter-c, tree-sitter-python
 
 ### Requirements
 - `.planning/REQUIREMENTS.md` - Full requirements list; Phase 1 covers: IDXC-01 through IDXC-10, STOR-01, STOR-03, STOR-05, CLIF-01
 - `.planning/ROADMAP.md` §Phase 1 - Success criteria, plan breakdown (01-01 through 01-04)
+
+### Storage decision
+- `.planning/research/STACK.md` - Prior research comparing databases (NOTE: Ladybug vector index capability was missed in original research — Ladybug now has native vector indices + full-text search + graph traversal in one embedded DB)
 
 </canonical_refs>
 
@@ -90,8 +93,9 @@ This phase delivers: CLI entry point, directory walking, language detection, tre
 - **Reference data**: Linux kernel source at `00-supporting-files/data/linux-kernel/` available for testing large-repo indexing
 - **Shared config**: `.env` at `00-supporting-files/data/` for any LLM API keys (not needed in Phase 1, but available)
 
-### Key Change from Hackathon
-- **Storage**: LanceDB replaces Kuzu. The hackathon used Kuzu graph database; the production tool uses LanceDB for unified vector + metadata storage. Do NOT replicate Kuzu patterns — only reuse tree-sitter parsing logic.
+### Key Continuity from Hackathon
+- **Storage**: Ladybug (ex-Kuzu, package: `real_ladybug`) — graph relationships, vector indices, and full-text search in one embedded DB. Prior research missed that Ladybug added native vector indices. The original LanceDB rationale ("unifies everything in one DB") actually applies better to Ladybug now. Hackathon Kuzu patterns are directly reusable.
+- **Package manager**: `uv` for all dependency management (not pip). `uv add real_ladybug` etc.
 
 </code_context>
 
