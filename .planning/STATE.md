@@ -1,3 +1,19 @@
+---
+gsd_state_version: 1.0
+milestone: v1.0
+milestone_name: milestone
+status: completed
+stopped_at: Phase 1 complete, ready for Phase 2 planning
+last_updated: "2026-04-08T22:09:12.017Z"
+last_activity: 2026-04-08 - Phase 1 complete (4/4 plans, 116 tests)
+progress:
+  total_phases: 4
+  completed_phases: 1
+  total_plans: 4
+  completed_plans: 4
+  percent: 25
+---
+
 # Project State
 
 ## Project Reference
@@ -5,35 +21,35 @@
 See: .planning/PROJECT.md (updated 2026-04-08)
 
 **Core value:** Agents can call a single command and get exactly the code context they need to implement features — no grepping, no raw file parsing, no guesswork.
-**Current focus:** Phase 1 - Core Indexing Pipeline
+**Current focus:** Phase 2 - Relationship Extraction
 
 ## Current Position
 
-Phase: 1 of 4 (Core Indexing Pipeline)
-Plan: 0 of 4 in current phase
-Status: Context gathered, ready to plan
-Last activity: 2026-04-08 - Phase 1 context captured (5 areas discussed)
+Phase: 01 of 1 (core indexing pipeline)
+Plan: 4 of 4
+Status: Milestone complete
+Last activity: 2026-04-08 - Phase 1 complete (4/4 plans, 116 tests)
 
-Progress: [░░░░░░░░░░] 0%
+Progress: [██░░░░░░░░] 25%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 0
-- Average duration: -
-- Total execution time: 0 hours
+
+- Total plans completed: 4
+- Average duration: ~25 minutes per plan
+- Total execution time: ~1.5 hours
 
 **By Phase:**
 
-| Phase | Plans | Total | Avg/Plan |
-| ----- | ----- | ----- | -------- |
-| -     | -     | -     | -        |
+| Phase | Plans | Total  | Avg/Plan |
+| ----- | ----- | ------ | -------- |
+| 1     | 4     | ~1.5h  | ~25min   |
 
 **Recent Trend:**
-- Last 5 plans: none
-- Trend: N/A
 
-*Updated after each plan completion*
+- Last 5 plans: 01-01, 01-02, 01-03, 01-04
+- Trend: All completed successfully
 
 ## Accumulated Context
 
@@ -42,10 +58,11 @@ Progress: [░░░░░░░░░░] 0%
 Decisions are logged in PROJECT.md Key Decisions table.
 Recent decisions affecting current work:
 
-- [Init]: Ladybug (ex-Kuzu, package: `real_ladybug`) chosen for storage — graph relationships, vector indices, and full-text search in one embedded DB. Replaced prior LanceDB decision.
-- [Init]: CLI-first design (not MCP server) — works with any agent that can run shell commands
-- [Init]: Local embeddings (sentence-transformers) for air-gapped compatibility
-- [Init]: Comment attachment solved as AST post-processing pass
+- [Phase 1]: Ladybug (real_ladybug) import differs from PyPI name — `from real_ladybug import Database, Connection`
+- [Phase 1]: Ladybug DB expects file path, not directory — `Database('/path/to/file.lbug')`
+- [Phase 1]: Markdown filenames include source extension to avoid collisions (sample.c.md, sample.py.md)
+- [Phase 1]: AST walker uses broad recursion (all children) to reach Python methods inside block nodes
+- [Phase 1]: upsert_file must delete chunks first (DETACH DELETE) before deleting file node
 
 ### Pending Todos
 
@@ -54,10 +71,10 @@ None yet.
 ### Blockers/Concerns
 
 - Relationship extraction accuracy is the highest-risk area (the hackathon wall). Phase 2 designed for partial resolution with confidence tagging.
-- LanceDB relationship storage pattern needs validation during Phase 1 — confirm metadata tables handle join patterns needed.
+- Ladybug vector index capabilities not yet validated — will be tested in Phase 3.
 
 ## Session Continuity
 
 Last session: 2026-04-08
-Stopped at: Phase 1 context gathered
-Resume file: .planning/phases/01-core-indexing-pipeline/01-CONTEXT.md
+Stopped at: Phase 1 complete, ready for Phase 2 planning
+Resume file: .planning/phases/01-core-indexing-pipeline/01-04-SUMMARY.md

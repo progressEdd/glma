@@ -12,29 +12,34 @@ Agents can call a single command and get exactly the code context they need to i
 
 ### Validated
 
-<!-- Shipped and confirmed valuable from hackathon work. -->
+<!-- Shipped and confirmed valuable from hackathon work + Phase 1. -->
 
-- ✓ Tree-sitter chunking of C source files - existing (hackathon: `develop.ipynb`)
-- ✓ Tree-sitter chunking of Python source files - existing (grammar installed, tested)
-- ✓ Loading parsed chunks into a graph database - existing (Kuzu)
-- ✓ LLM summarization of code chunks - existing (Azure OpenAI, NVIDIA NIMs, local Ollama)
-- ✓ File extension detection and classification - existing (pandas analysis)
+- ✓ Tree-sitter chunking of C source files - existing (hackathon: `develop.ipynb`) + Phase 1 (`glma index`)
+- ✓ Tree-sitter chunking of Python source files - existing (grammar installed, tested) + Phase 1
+- ✓ Loading parsed chunks into a graph database - Phase 1 (Ladybug store with Chunk/File/CONTAINS schema)
+- ✓ File extension detection and classification - Phase 1 (detector.py)
+- ✓ CLI entry point with `glma index` command - Phase 1 (Typer CLI)
+- ✓ Configuration from `.glma.toml` with CLI overrides - Phase 1 (config.py)
+- ✓ Directory walking with exclusion filtering - Phase 1 (walker.py)
+- ✓ Comment attachment via AST post-processing - Phase 1 (comments.py)
+- ✓ Per-file markdown output in layered summary format - Phase 1 (writer.py)
+- ✓ Content hashing for incremental re-indexing - Phase 1 (pipeline.py, BLAKE2b)
+- ✓ Progress display during indexing - Phase 1 (Rich progress bar)
 - ✓ Jupyter notebook-based analysis pipeline - existing (88-cell notebook)
-- ✓ Environment configuration for multiple LLM providers - existing (python-dotenv)
 
 ### Active
 
 <!-- Current scope. Building toward these. -->
 
-- [ ] Generalized indexer: point at any repo, parse all supported languages, store in graph DB
+- [ ] Generalized indexer: point at any repo, parse all supported languages, store in graph DB — ✓ DONE in Phase 1
 - [ ] Relationship extraction between code chunks (function calls, imports, class hierarchies, variable references)
 - [ ] Semantic search layer on top of graph relationships
-- [ ] CLI query tool: agents call `get_context <filepath>` and get compacted relevant chunks as markdown
+- [ ] CLI query tool: agents call `glma query <filepath>` and get compacted relevant chunks as markdown
 - [ ] Jupyter notebook compaction: flatten `.ipynb` into readable markdown (cell index, code, variables, references)
-- [ ] Markdown as first-class output: human-browsable, agent-readable repo documentation
+- [ ] Markdown as first-class output: human-browsable, agent-readable repo documentation — ✓ DONE in Phase 1
 - [ ] File watcher: detect codebase changes, incrementally update DB and markdown
 - [ ] Air-gapped mode: markdown IS the database — shell-only agents can work from it with no Python/JS runtime
-- [ ] Extensible language support (starting with C and Python, designed for any tree-sitter grammar)
+- [ ] Extensible language support (starting with C and Python, designed for any tree-sitter grammar) — ✓ Foundation in Phase 1
 
 ### Out of Scope
 
@@ -64,12 +69,12 @@ Agents can call a single command and get exactly the code context they need to i
 
 | Decision | Rationale | Outcome |
 | --- | --- | --- |
-| CLI-first, not MCP server | Matches pi-gsd-tools pattern, works with any agent that can run shell commands | - Pending |
-| Ladybug (real_ladybug) for storage | Embedded graph DB with native vector indices + full-text search + Cypher queries; ex-Kuzu so hackathon code directly reusable | - Pending |
-| Markdown as first-class output | Required for air-gapped environments; also human-browsable and directly consumable by any LLM | - Pending |
-| Tree-sitter for parsing | Already proven in hackathon, supports 40+ languages, incremental parsing available | ✓ Good (hackathon validated) |
-| Incremental updates via file watcher | Large repos can't be re-indexed from scratch on every change | - Pending |
-| Start with C and Python | Both grammars tested, both relevant to the Linux kernel use case and general codebase analysis | ✓ Good (hackathon validated) |
+| CLI-first, not MCP server | Matches pi-gsd-tools pattern, works with any agent that can run shell commands | ✓ Good (Phase 1: `glma index` works) |
+| Ladybug (real_ladybug) for storage | Embedded graph DB with native vector indices + full-text search + Cypher queries; ex-Kuzu so hackathon code directly reusable | ✓ Good (Phase 1: LadybugStore working) |
+| Markdown as first-class output | Required for air-gapped environments; also human-browsable and directly consumable by any LLM | ✓ Good (Phase 1: layered markdown output) |
+| Tree-sitter for parsing | Already proven in hackathon, supports 40+ languages, incremental parsing available | ✓ Good (Phase 1: C + Python parsing working) |
+| Incremental updates via file watcher | Large repos can't be re-indexed from scratch on every change | - Pending (Phase 4) |
+| Start with C and Python | Both grammars tested, both relevant to the Linux kernel use case and general codebase analysis | ✓ Good (Phase 1: both working) |
 
 ## Evolution
 
@@ -89,4 +94,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-08 after initialization*
+*Last updated: 2026-04-08 after Phase 1 completion*
