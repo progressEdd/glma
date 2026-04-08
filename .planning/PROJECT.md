@@ -56,7 +56,7 @@ Agents can call a single command and get exactly the code context they need to i
 ## Constraints
 
 - **Languages (v1):** C and Python only — tree-sitter grammars already proven
-- **Graph DB:** Evaluating Ladybug (graph DB) vs LanceDB (vector store) — need structural relationships + semantic search
+- **Graph DB:** Ladybug (ex-Kuzu, package: `real_ladybug`) — embedded graph DB with native vector indices + full-text search, replaces prior LanceDB evaluation
 - **Air-gapped compatibility:** All agent-facing output must be consumable as plain text/markdown with only shell tools
 - **No runtime dependency for consumers:** Agents that query the tool shouldn't need Python installed (markdown output must be self-sufficient)
 
@@ -65,7 +65,7 @@ Agents can call a single command and get exactly the code context they need to i
 | Decision | Rationale | Outcome |
 | --- | --- | --- |
 | CLI-first, not MCP server | Matches pi-gsd-tools pattern, works with any agent that can run shell commands | - Pending |
-| Graph DB for relationships, semantic search layered on top | Structural relationships (calls, imports) are the core value; semantic search is an enhancement | - Pending |
+| Ladybug (real_ladybug) for storage | Embedded graph DB with native vector indices + full-text search + Cypher queries; ex-Kuzu so hackathon code directly reusable | - Pending |
 | Markdown as first-class output | Required for air-gapped environments; also human-browsable and directly consumable by any LLM | - Pending |
 | Tree-sitter for parsing | Already proven in hackathon, supports 40+ languages, incremental parsing available | ✓ Good (hackathon validated) |
 | Incremental updates via file watcher | Large repos can't be re-indexed from scratch on every change | - Pending |
