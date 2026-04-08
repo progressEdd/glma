@@ -148,11 +148,12 @@ def write_markdown(
 
     file_path = chunks[0].file_path
 
-    # Output path: .glma-index/markdown/<relative-path>.md
+    # Output path: .glma-index/markdown/<relative-path-with-extension>.md
+    # Use full filename (including extension) to avoid collisions like sample.c vs sample.py
     md_dir = repo_root / output_dir / "markdown" / Path(file_path).parent
     md_dir.mkdir(parents=True, exist_ok=True)
 
-    md_filename = Path(file_path).stem + ".md"
+    md_filename = Path(file_path).name + ".md"
     md_path = md_dir / md_filename
 
     content = format_file_markdown(file_path, chunks)
