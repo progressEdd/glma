@@ -1,9 +1,0 @@
-[submodule "01-dev-onboarding"]
-	path = 01-dev-onboarding
-	url = https://github.com/progressEdd/dev-onboarding.git
-[submodule "00-supporting-files/data/linux-kernel"]
-	path = 00-supporting-files/data/linux-kernel
-	url = https://github.com/torvalds/linux.git
-[submodule "00-supporting-files/data/ag2-framework"]
-	path = 00-supporting-files/data/ag2-framework
-	url = https://github.com/ag2ai/ag2.git

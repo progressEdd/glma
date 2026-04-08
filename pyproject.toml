@@ -1,7 +1,7 @@
 [project]
-name = "glma"
+name = "glma-linux-kernel"
 version = "0.1.0"
-description = "Add your description here"
+description = "Exploration of the Linux kernel codebase using AI agents for documentation and analysis"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
@@ -14,7 +14,6 @@ dependencies = [
     "yfiles-jupyter-graphs>=1.10.6",
     "yfiles-jupyter-graphs-for-kuzu>=0.0.4",
     "openai>=1.91.0",
-    "python-dotenv>=1.1.0",
     "tree-sitter-c>=0.24.1",
     "tree-sitter-python>=0.23.6",
     "tree-sitter>=0.24.0",
