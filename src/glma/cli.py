@@ -66,5 +66,13 @@ def index(
         console.print(f"  Languages: {', '.join(l.value for l in cfg.languages)}")
         console.print(f"  Output: {cfg.output_dir}")
 
-    # TODO: Wire up actual indexing pipeline (Plan 01-02 through 01-04)
-    console.print("[yellow]Indexing pipeline not yet implemented.[/yellow]")
+    # Run the indexing pipeline
+    from glma.index.pipeline import run_index
+    from glma.index.progress import IndexProgress
+
+    progress = IndexProgress(quiet=cfg.quiet, console=console)
+    result = run_index(repo_path, cfg, progress=progress)
+
+    if result.total_files == 0:
+        console.print("[yellow]No supported source files found.[/yellow]")
+        raise typer.Exit(1)
