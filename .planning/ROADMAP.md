@@ -13,7 +13,7 @@ Build a CLI tool that indexes codebases into a queryable graph database with com
 Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Core Indexing Pipeline** - Parse repos with tree-sitter, extract chunks, store in LanceDB + markdown
-- [ ] **Phase 2: Relationship Extraction** - Extract calls, imports, and inheritance relationships from ASTs
+- [x] **Phase 2: Relationship Extraction** - Extract calls, imports, and inheritance relationships from ASTs
 - [ ] **Phase 3: Query Tool & Notebook Compaction** - CLI query interface, Jupyter compaction, layered markdown output
 - [ ] **Phase 4: File Watching & Air-Gapped Export** - Live sync, incremental updates, static markdown export
 
@@ -50,9 +50,9 @@ Plans:
 **Plans**: 3 plans across 3 waves
 
 Plans:
-- [ ] 02-01: Relationship data model, LanceDB relationships table, C relationship extraction
-- [ ] 02-02: Python relationship extraction, import alias resolution, self.method() resolution
-- [ ] 02-03: Confidence tagging, relationship markdown output, cross-file resolution
+- [x] 02-01: Relationship data model, LanceDB relationships table, C relationship extraction
+- [x] 02-02: Python relationship extraction, import alias resolution, self.method() resolution
+- [x] 02-03: Confidence tagging, relationship markdown output, cross-file resolution
 
 ### Phase 3: Query Tool & Notebook Compaction
 **Goal**: Agents can call `glma query <filepath>` and get back compacted, relevant context as markdown — including Jupyter notebooks flattened into readable form
@@ -94,6 +94,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Core Indexing Pipeline | 4/4 | Complete | 2026-04-08 |
-| 2. Relationship Extraction | 0/3 | Planned | - |
+| 2. Relationship Extraction | 3/3 | Complete | 2026-04-09 |
 | 3. Query Tool & Notebook Compaction | 0/3 | Not started | - |
 | 4. File Watching & Air-Gapped Export | 0/2 | Not started | - |
