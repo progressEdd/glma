@@ -15,7 +15,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 1: Core Indexing Pipeline** - Parse repos with tree-sitter, extract chunks, store in LanceDB + markdown
 - [x] **Phase 2: Relationship Extraction** - Extract calls, imports, and inheritance relationships from ASTs
 - [x] **Phase 3: Query Tool & Notebook Compaction** - CLI query interface, Jupyter compaction, layered markdown output
-- [ ] **Phase 4: File Watching & Air-Gapped Export** - Live sync, incremental updates, static markdown export
+- [x] **Phase 4: File Watching & Air-Gapped Export** - Live sync, incremental updates, static markdown export
 
 ## Phase Details
 
@@ -83,8 +83,8 @@ Plans:
 **Plans**: TBD
 
 Plans:
-- [ ] 04-01: File watcher with watchfiles, incremental re-indexing, dual output sync
-- [ ] 04-02: Air-gapped markdown export, full index serialization, validation
+- [x] 04-01: File watcher with watchfiles, incremental re-indexing, dual output sync
+- [x] 04-02: Air-gapped markdown export, full index serialization, validation
 
 ## Progress
 
@@ -96,4 +96,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 | 1. Core Indexing Pipeline | 4/4 | Complete | 2026-04-08 |
 | 2. Relationship Extraction | 3/3 | Complete | 2026-04-09 |
 | 3. Query Tool & Notebook Compaction | 3/3 | Complete | 2026-04-09 |
-| 4. File Watching & Air-Gapped Export | 0/2 | Not started | - |
+| 4. File Watching & Air-Gapped Export | 2/2 | Complete | 2026-04-09 |

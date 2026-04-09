@@ -37,8 +37,8 @@ Agents can call a single command and get exactly the code context they need to i
 - [ ] CLI query tool: agents call `glma query <filepath>` and get compacted relevant chunks as markdown — ✓ DONE in Phase 3
 - [ ] Jupyter notebook compaction: flatten `.ipynb` into readable markdown (cell index, code, variables, references) — ✓ DONE in Phase 3
 - [ ] Markdown as first-class output: human-browsable, agent-readable repo documentation — ✓ DONE in Phase 1
-- [ ] File watcher: detect codebase changes, incrementally update DB and markdown
-- [ ] Air-gapped mode: markdown IS the database — shell-only agents can work from it with no Python/JS runtime
+- [ ] File watcher: detect codebase changes, incrementally update DB and markdown — ✓ DONE in Phase 4
+- [ ] Air-gapped mode: markdown IS the database — shell-only agents can work from it with no Python/JS runtime — ✓ DONE in Phase 4
 - [ ] Extensible language support (starting with C and Python, designed for any tree-sitter grammar) — ✓ Foundation in Phase 1
 
 ### Out of Scope
@@ -79,7 +79,10 @@ Agents can call a single command and get exactly the code context they need to i
 | Query output from DB, not markdown slices | Fresh query output is more compact and relevant than slicing full per-file markdown; decouples query format from storage format | ✓ Good (Phase 3: query formatter working) |
 | Per-statement variable tracking for notebooks | Per-cell is too coarse; per-statement gives agents precise data flow understanding | ✓ Good (Phase 3: variable tracking working) |
 | Notebooks bypass LadybugStore | .ipynb files are self-contained; no need to index into graph DB for compaction | ✓ Good (Phase 3: direct nbformat parsing) |
-| BFS traversal with visited set | Prevents infinite loops on circular relationships; depth cap at 10 in CLI | ✓ Good (Phase 3: traverse_relationships) |
+| watchfiles for async file watching | awatch provides OS-level event batching, rename detection via basename heuristic | ✓ Good (Phase 4: watch_and_index working) |
+| Rule-based summaries for export | Deterministic file summaries from chunk + relationship data, no LLM needed | ✓ Good (Phase 4: generate_rule_summary) |
+| Three export output modes | Directory, tar.gz, stdout — covers all consumption scenarios | ✓ Good (Phase 4: export_index) |
+| Incremental pipeline params | changed_files/deleted_paths enable targeted re-indexing without full walk | ✓ Good (Phase 4: run_index extension) |
 | Start with C and Python | Both grammars tested, both relevant to the Linux kernel use case and general codebase analysis | ✓ Good (Phase 1: both working) |
 
 ## Evolution
@@ -100,4 +103,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-09 after Phase 3 completion*
+*Last updated: 2026-04-09 after Phase 4 completion (all phases done)*
