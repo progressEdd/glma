@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: active
-stopped_at: Phase 4 context gathered
-last_updated: "2026-04-09T20:30:00.000Z"
-last_activity: 2026-04-09 - Phase 4 context gathered
+status: completed
+stopped_at: Phase 4 complete (all phases done, milestone complete)
+last_updated: "2026-04-09T22:23:51.441Z"
+last_activity: 2026-04-09 - All phases complete
 progress:
   total_phases: 4
-  completed_phases: 3
-  total_plans: 10
-  completed_plans: 10
-  percent: 75
+  completed_phases: 4
+  total_plans: 12
+  completed_plans: 12
+  percent: 100
 ---
 
 # Project State
@@ -21,23 +21,23 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-09)
 
 **Core value:** Agents can call a single command and get exactly the code context they need to implement features — no grepping, no raw file parsing, no guesswork.
-**Current focus:** Phase 3 complete - Query Tool & Notebook Compaction
+**Current focus:** All phases complete - v1.0 milestone done
 
 ## Current Position
 
-Phase: 04 of 4 (file watching air-gapped export)
-Plan: 0 of 0
-Status: Context gathered
-Last activity: 2026-04-09 - Phase 4 context gathered
+Phase: 04 of 4 (file watching air gapped export)
+Plan: 2 of 2
+Status: Milestone complete
+Last activity: 2026-04-09 - All phases complete
 
-Progress: [█████████░] 75%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 10
-- Average duration: ~20 minutes per plan
+- Total plans completed: 14
+- Average duration: ~15 minutes per plan
 - Total execution time: ~3.5 hours
 
 **By Phase:**
@@ -47,10 +47,11 @@ Progress: [█████████░] 75%
 | 1     | 4     | ~1.5h  | ~25min   |
 | 2     | 3     | ~45min | ~15min   |
 | 3     | 3     | ~30min | ~10min   |
+| 4     | 2     | ~20min | ~10min   |
 
 **Recent Trend:**
 
-- Last 5 plans: 01-04, 02-01, 02-02, 02-03, 03-01, 03-02, 03-03
+- Last 9 plans: 01-04, 02-01, 02-02, 02-03, 03-01, 03-02, 03-03, 04-01, 04-02
 - Trend: All completed successfully, accelerating
 
 ## Accumulated Context
@@ -71,17 +72,21 @@ Recent decisions affecting current work:
 - [Phase 3]: Query output is generated fresh from DB queries, not by slicing existing per-file markdown
 - [Phase 3]: Per-statement variable tracking (not per-cell) for better agent debugging
 - [Phase 3]: Notebook queries bypass LadybugStore — compacted directly from .ipynb files
+- [Phase 4]: watchfiles for async file watching (awatch batches events at OS level)
+- [Phase 4]: Same-basename heuristic for rename detection in batch window
+- [Phase 4]: Rule-based summaries by default for export (deterministic, no LLM dependency)
+- [Phase 4]: Three export output modes: directory, tar.gz archive, stdout pipe
 
 ### Pending Todos
 
-None yet.
+None.
 
 ### Blockers/Concerns
 
-- None — all phases through 3 completed successfully.
+- None — all 4 phases completed successfully.
 
 ## Session Continuity
 
 Last session: 2026-04-09
-Stopped at: Phase 3 complete
-Resume file: .planning/phases/04-file-watching-air-gapped-export/04-CONTEXT.md
+Stopped at: Phase 4 complete (all phases done, milestone complete)
+Resume file: N/A - milestone complete
