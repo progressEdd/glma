@@ -5,7 +5,7 @@ from typing import Optional
 
 from real_ladybug import Database, Connection
 
-from glma.models import Chunk, FileRecord, Relationship
+from glma.models import Chunk, ChunkType, FileRecord, Language, Relationship
 
 
 class LadybugStore:
@@ -233,6 +233,99 @@ class LadybugStore:
                 "target_name": row[5], "target_id": row[6], "target_name_resolved": row[7],
             })
         return rows
+
+    def get_file_record(self, file_path: str) -> Optional[FileRecord]:
+        """Get a file record by path, or None if not indexed."""
+        result = self.conn.execute(
+            "MATCH (f:File {path: $path}) RETURN f.path, f.language, f.content_hash, f.last_indexed, f.chunk_count",
+            {"path": file_path},
+        )
+        rows = list(result)
+        if not rows:
+            return None
+        row = rows[0]
+        return FileRecord(
+            path=row[0],
+            language=Language(row[1]),
+            content_hash=row[2],
+            last_indexed=row[3],
+            chunk_count=row[4],
+        )
+
+    def get_chunks_for_file(self, file_path: str) -> list[Chunk]:
+        """Get all chunks for a file, ordered by start_line."""
+        result = self.conn.execute(
+            """MATCH (c:Chunk {file_path: $fp})
+            RETURN c.id, c.name, c.chunk_type, c.file_path, c.content, c.summary,
+                   c.start_line, c.end_line, c.content_hash, c.parent_id
+            ORDER BY c.start_line""",
+            {"fp": file_path},
+        )
+        chunks = []
+        for row in result:
+            chunks.append(Chunk(
+                id=row[0], name=row[1], chunk_type=ChunkType(row[2]),
+                file_path=row[3], content=row[4], summary=row[5] or None,
+                start_line=row[6], end_line=row[7], content_hash=row[8],
+                parent_id=row[9] or None,
+            ))
+        return chunks
+
+    def get_all_relationships_for_file(self, file_path: str) -> dict:
+        """Get all relationships (outgoing + incoming) for a file's chunks.
+
+        Returns:
+            Dict keyed by chunk_id, each value has {"outgoing": [...], "incoming": [...]}.
+        """
+        relationships: dict[str, dict] = {}
+
+        # Get outgoing relationships
+        outgoing = self.get_file_relationships(file_path)
+        for rel in outgoing:
+            source_id = rel["source_id"]
+            if source_id not in relationships:
+                relationships[source_id] = {"outgoing": [], "incoming": []}
+            # Skip self-referential edges (unresolved targets) for chunks in this file
+            if rel["source_id"] == rel["target_id"]:
+                # Self-ref edge: still include as outgoing (unresolved target)
+                relationships[source_id]["outgoing"].append(rel)
+            else:
+                relationships[source_id]["outgoing"].append(rel)
+
+        # Get incoming relationships for each chunk
+        chunks = self.get_chunks_for_file(file_path)
+        chunk_ids = {c.id for c in chunks}
+        for chunk in chunks:
+            if chunk.id not in relationships:
+                relationships[chunk.id] = {"outgoing": [], "incoming": []}
+            incoming = self.get_incoming_relationships(chunk.id)
+            for rel in incoming:
+                source_id = rel["source_id"]
+                # Skip self-referential edges where source is also in this file
+                if source_id == chunk.id:
+                    continue
+                # Get source file path
+                try:
+                    source_result = self.conn.execute(
+                        "MATCH (c:Chunk {id: $sid}) RETURN c.file_path",
+                        {"sid": source_id},
+                    )
+                    source_rows = list(source_result)
+                    source_file = source_rows[0][0] if source_rows else ""
+                except Exception:
+                    source_file = ""
+
+                # Skip if source is in the same file (internal refs handled by outgoing)
+                if source_file == file_path:
+                    continue
+
+                rel["direction"] = "incoming"
+                rel["target_id"] = chunk.id
+                rel["target_name"] = chunk.name
+                rel["target_name_resolved"] = chunk.name
+                relationships[chunk.id]["incoming"].append(rel)
+
+        return relationships
 
     def close(self) -> None:
         """Close the database connection."""

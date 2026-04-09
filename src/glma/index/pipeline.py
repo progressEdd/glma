@@ -156,7 +156,7 @@ def run_index(
             continue
 
         # Get chunks for this file from the DB
-        chunks = _load_chunks_from_store(store, relative_path)
+        chunks = store.get_chunks_for_file(relative_path) if hasattr(store, 'get_chunks_for_file') else _load_chunks_from_store(store, relative_path)
         if not chunks:
             continue
 
@@ -174,7 +174,7 @@ def run_index(
         language = Language(language_name)
         relative_path = str(filepath.relative_to(repo_root))
 
-        chunks = _load_chunks_from_store(store, relative_path)
+        chunks = store.get_chunks_for_file(relative_path) if hasattr(store, 'get_chunks_for_file') else _load_chunks_from_store(store, relative_path)
         if not chunks:
             continue
 
