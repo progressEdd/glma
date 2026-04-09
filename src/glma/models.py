@@ -79,6 +79,20 @@ class QueryConfig(BaseModel):
     summary_only: bool = Field(default=False, description="Show only file summary, skip signatures")
 
 
+class WatchConfig(BaseModel):
+    """Configuration for file watching, loaded from .glma.toml + CLI flags."""
+    debounce_seconds: float = Field(
+        default=3.0,
+        ge=0.5,
+        le=30.0,
+        description="Batch window for collecting file change events before processing",
+    )
+    verbose: bool = Field(
+        default=False,
+        description="Log every file event (type + path)",
+    )
+
+
 class IndexConfig(BaseModel):
     """Configuration for indexing, loaded from .glma.toml + CLI flags."""
     languages: list[Language] = Field(

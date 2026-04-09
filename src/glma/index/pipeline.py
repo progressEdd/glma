@@ -45,6 +45,8 @@ def run_index(
     config: IndexConfig,
     store: Optional[LadybugStore] = None,
     progress: Optional[IndexProgress] = None,
+    changed_files: Optional[list[tuple[Path, str]]] = None,
+    deleted_paths: Optional[list[str]] = None,
 ) -> IndexResult:
     """Run the full indexing pipeline on a repository.
 
@@ -67,8 +69,11 @@ def run_index(
     if store is None:
         store = LadybugStore(db_path)
 
-    # Phase 1: Walk and discover files
-    source_files = list(walk_source_files(repo_root, config))
+    # Phase 1: Walk and discover files (or use provided file list)
+    if changed_files is not None:
+        source_files = changed_files
+    else:
+        source_files = list(walk_source_files(repo_root, config))
     result.total_files = len(source_files)
 
     if progress:
@@ -78,6 +83,9 @@ def run_index(
     indexed_files = store.get_indexed_files()
     indexed_paths = set(indexed_files.keys())
     source_paths = {str(f.relative_to(repo_root)) for f, _ in source_files}
+
+    # Track which files actually changed (new or updated content)
+    changed_relative_paths: set[str] = set()
 
     # Phase 2: Process each file (streaming — one at a time)
     for filepath, language_name in source_files:
@@ -102,6 +110,7 @@ def run_index(
 
         # File is new or changed — process it
         is_new = relative_path not in indexed_paths
+        changed_relative_paths.add(relative_path)
 
         # Parse and extract chunks
         chunks = extract_chunks(filepath, language, repo_root)
@@ -142,17 +151,8 @@ def run_index(
         language = Language(language_name)
         relative_path = str(filepath.relative_to(repo_root))
 
-        try:
-            current_hash = file_content_hash(filepath)
-        except (OSError, IOError):
-            continue
-
-        stored_hash = indexed_files.get(relative_path)
-        if stored_hash == current_hash and relative_path not in source_paths:
-            continue
-
-        # Only process files that were actually updated in Pass 1
-        if stored_hash == current_hash:
+        # Skip files that weren't actually changed
+        if relative_path not in changed_relative_paths:
             continue
 
         # Get chunks for this file from the DB
@@ -170,9 +170,32 @@ def run_index(
         write_markdown(chunks, repo_root, config.output_dir, relationships=file_rels)
 
     # Pass 3: Cross-file incoming relationships — final markdown rewrite
+    # Process changed files + files that depend on them
+    dependent_paths: set[str] = set()
+    for changed_path in changed_relative_paths:
+        chunks = store.get_chunks_for_file(changed_path) if hasattr(store, 'get_chunks_for_file') else _load_chunks_from_store(store, changed_path)
+        for chunk in chunks:
+            incoming = store.get_incoming_relationships(chunk.id)
+            for rel in incoming:
+                try:
+                    src_result = store.conn.execute(
+                        "MATCH (c:Chunk {id: $sid}) RETURN c.file_path",
+                        {"sid": rel["source_id"]},
+                    )
+                    src_rows = list(src_result)
+                    if src_rows:
+                        dependent_paths.add(src_rows[0][0])
+                except Exception:
+                    pass
+
+    pass3_paths = changed_relative_paths | dependent_paths
+
     for filepath, language_name in source_files:
         language = Language(language_name)
         relative_path = str(filepath.relative_to(repo_root))
+
+        if relative_path not in pass3_paths:
+            continue
 
         chunks = store.get_chunks_for_file(relative_path) if hasattr(store, 'get_chunks_for_file') else _load_chunks_from_store(store, relative_path)
         if not chunks:
@@ -209,8 +232,10 @@ def run_index(
         write_markdown(chunks, repo_root, config.output_dir, relationships=all_rels)
 
     # Phase 3: Delete removed files
-    deleted_paths = indexed_paths - source_paths
-    for path_to_delete in deleted_paths:
+    explicit_deleted = set(deleted_paths) if deleted_paths else set()
+    auto_deleted = indexed_paths - source_paths
+    all_deleted = auto_deleted | explicit_deleted
+    for path_to_delete in all_deleted:
         store.delete_relationships(path_to_delete)
         store.delete_file(path_to_delete)
         # Also remove markdown file if it exists

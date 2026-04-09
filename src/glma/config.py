@@ -4,7 +4,7 @@ import tomllib
 from pathlib import Path
 from typing import Optional
 
-from glma.models import IndexConfig, Language
+from glma.models import IndexConfig, Language, WatchConfig
 
 
 def load_config(repo_root: Path, cli_overrides: Optional[dict] = None) -> IndexConfig:
@@ -41,3 +41,24 @@ def load_config(repo_root: Path, cli_overrides: Optional[dict] = None) -> IndexC
                 merged[key] = value
 
     return IndexConfig(**merged)
+
+
+def load_watch_config(repo_root: Path, cli_overrides: Optional[dict] = None) -> WatchConfig:
+    """Load watch configuration from .glma.toml [watch] section + CLI flags."""
+    config_path = repo_root / ".glma.toml"
+    file_config = {}
+
+    if config_path.exists():
+        with open(config_path, "rb") as f:
+            raw = tomllib.load(f)
+        file_config = raw.get("watch", {})
+
+    merged = {}
+    if file_config:
+        merged.update(file_config)
+    if cli_overrides:
+        for key, value in cli_overrides.items():
+            if value is not None:
+                merged[key] = value
+
+    return WatchConfig(**merged)
