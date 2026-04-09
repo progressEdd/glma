@@ -136,7 +136,7 @@ def run_index(
 
     # Pass 2: Extract relationships (requires all chunks in DB for cross-file resolution)
     if progress:
-        progress._console.print("[dim]Extracting relationships...[/dim]")
+        progress.console.print("[dim]Extracting relationships...[/dim]")
 
     for filepath, language_name in source_files:
         language = Language(language_name)

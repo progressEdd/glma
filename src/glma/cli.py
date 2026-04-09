@@ -87,14 +87,46 @@ def _write_output(text: str, output_path: Optional[str]) -> None:
         console.print(text, highlight=False, soft_wrap=True)
 
 
+def _group_rels_by_chunk(rels: list[dict], chunk_ids: list[str]) -> dict:
+    """Group flat relationship list by chunk_id.
+
+    Returns dict keyed by chunk_id with 'outgoing' and 'incoming' lists.
+    """
+    result: dict[str, dict] = {cid: {"outgoing": [], "incoming": []} for cid in chunk_ids}
+    for rel in rels:
+        if rel.get("direction") == "incoming":
+            target_id = rel.get("target_id", "")
+            if target_id in result:
+                result[target_id]["incoming"].append(rel)
+        else:
+            source_id = rel.get("source_id", "")
+            if source_id in result:
+                result[source_id]["outgoing"].append(rel)
+    return result
+
+
 @app.command()
 def query(
     filepath: str = typer.Argument(..., help="Path to file to query (relative to repo root)."),
     verbose: bool = typer.Option(False, "--verbose", "-V", help="Include full code bodies."),
+    depth: int = typer.Option(1, "--depth", "-d", help="Relationship traversal depth (1-10)."),
+    no_relationships: bool = typer.Option(False, "--no-relationships", help="Skip dependency section."),
+    output_format: str = typer.Option("markdown", "--format", "-f", help="Output format: markdown, json."),
+    rel_types: Optional[str] = typer.Option(None, "--rel-types", help="Comma-separated relationship types to show."),
+    summary_only: bool = typer.Option(False, "--summary-only", help="Show only file summary."),
     output: Optional[str] = typer.Option(None, "--output", "-o", help="Output file path (default: stdout)."),
     repo_root: Optional[Path] = typer.Option(None, "--repo", "-r", help="Repo root directory (auto-detected)."),
+    include_outputs: bool = typer.Option(False, "--include-outputs", help="Include notebook cell outputs."),
 ) -> None:
     """Query an indexed file and output compacted markdown."""
+    # Validate flags
+    if output_format not in ("markdown", "json"):
+        sys.stderr.write("Error: format must be 'markdown' or 'json'\n")
+        raise typer.Exit(4)
+    if depth < 1 or depth > 10:
+        sys.stderr.write("Error: depth must be between 1 and 10\n")
+        raise typer.Exit(4)
+
     # Resolve repo root
     if repo_root:
         repo_root_path = repo_root.resolve()
@@ -110,6 +142,17 @@ def query(
         if not found:
             sys.stderr.write("Error: Not inside an indexed repository. Use --repo to specify root.\n")
             raise typer.Exit(4)
+
+    # Notebook dispatch: bypass LadybugStore entirely
+    if filepath.endswith('.ipynb'):
+        disk_path = repo_root_path / filepath
+        if not disk_path.exists():
+            sys.stderr.write(f"Error: File not found: {filepath}\n")
+            raise typer.Exit(1)
+        from glma.query.notebook import compact_notebook
+        result_text = compact_notebook(disk_path, include_outputs=include_outputs)
+        _write_output(result_text, output)
+        return
 
     # Locate index database
     db_path = repo_root_path / ".glma-index" / "db" / "index.lbug"
@@ -138,11 +181,42 @@ def query(
     if stale:
         sys.stderr.write("Warning: File has been modified since last index. Results may be stale.\n")
 
-    # Load data and format
+    # Build QueryConfig
+    from glma.models import QueryConfig
+    cfg = QueryConfig(
+        verbose=verbose,
+        depth=min(depth, 10),
+        no_relationships=no_relationships,
+        output_format=output_format,
+        rel_types=rel_types.split(",") if rel_types else [],
+        summary_only=summary_only,
+    )
+
+    # Load data
     chunks = store.get_chunks_for_file(filepath)
-    relationships = store.get_all_relationships_for_file(filepath)
-    from glma.query.formatter import format_compact_output
-    output_text = format_compact_output(filepath, file_record, chunks, relationships, verbose=verbose)
+    chunk_ids = [c.id for c in chunks]
+
+    # Relationship loading
+    if cfg.depth > 1:
+        all_rels_flat = store.traverse_relationships(chunk_ids, max_depth=cfg.depth)
+        relationships = _group_rels_by_chunk(all_rels_flat, chunk_ids)
+    else:
+        all_rels_flat = store.get_file_relationships(filepath)
+        relationships = store.get_all_relationships_for_file(filepath)
+        # Build a flat list from the grouped dict for JSON output
+        flat_rels: list[dict] = []
+        for cid, rels in relationships.items():
+            flat_rels.extend(rels.get("outgoing", []))
+            flat_rels.extend(rels.get("incoming", []))
+        all_rels_flat = flat_rels
+
+    # Format output
+    if cfg.output_format == "json":
+        from glma.query.formatter import format_json_output
+        output_text = format_json_output(filepath, file_record, chunks, all_rels_flat, verbose=cfg.verbose)
+    else:
+        from glma.query.formatter import format_compact_output
+        output_text = format_compact_output(filepath, file_record, chunks, relationships, query_config=cfg)
 
     _write_output(output_text, output)
 

@@ -327,6 +327,60 @@ class LadybugStore:
 
         return relationships
 
+    def traverse_relationships(self, chunk_ids: list[str], max_depth: int = 1) -> list[dict]:
+        """BFS traversal of relationships up to max_depth hops.
+
+        Args:
+            chunk_ids: Starting chunk IDs for traversal.
+            max_depth: Maximum traversal depth (1 = direct relationships only).
+
+        Returns:
+            List of relationship dicts with added 'depth' field (1-indexed).
+        """
+        visited = set(chunk_ids)
+        queue = [(cid, 1) for cid in chunk_ids]
+        results: list[dict] = []
+
+        while queue:
+            current_id, depth = queue.pop(0)
+            if depth > max_depth:
+                continue
+
+            # Get outgoing relationships
+            for rel in self.get_outgoing_relationships(current_id):
+                target_id = rel.get("target_id", "")
+                # Skip self-referential edges
+                if current_id == target_id:
+                    rel_copy = dict(rel)
+                    rel_copy["source_id"] = current_id
+                    rel_copy["depth"] = depth
+                    results.append(rel_copy)
+                    continue
+                rel_copy = dict(rel)
+                rel_copy["source_id"] = current_id
+                rel_copy["depth"] = depth
+                results.append(rel_copy)
+                if target_id and target_id not in visited:
+                    visited.add(target_id)
+                    queue.append((target_id, depth + 1))
+
+            # Get incoming relationships
+            for rel in self.get_incoming_relationships(current_id):
+                source_id = rel.get("source_id", "")
+                # Skip self-referential edges
+                if current_id == source_id:
+                    continue
+                rel_copy = dict(rel)
+                rel_copy["target_id"] = current_id
+                rel_copy["direction"] = "incoming"
+                rel_copy["depth"] = depth
+                results.append(rel_copy)
+                if source_id and source_id not in visited:
+                    visited.add(source_id)
+                    queue.append((source_id, depth + 1))
+
+        return results
+
     def close(self) -> None:
         """Close the database connection."""
         del self.conn

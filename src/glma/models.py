@@ -69,6 +69,16 @@ class Relationship(BaseModel):
     source_line: int = Field(..., ge=1, description="Line where relationship originates")
 
 
+class QueryConfig(BaseModel):
+    """Configuration for query output, derived from CLI flags."""
+    verbose: bool = Field(default=False, description="Include full code bodies")
+    depth: int = Field(default=1, ge=1, le=10, description="Relationship traversal depth")
+    no_relationships: bool = Field(default=False, description="Skip dependency section")
+    output_format: str = Field(default="markdown", description="Output format: 'markdown' or 'json'")
+    rel_types: list[str] = Field(default_factory=list, description="Filter relationship types (empty = all)")
+    summary_only: bool = Field(default=False, description="Show only file summary, skip signatures")
+
+
 class IndexConfig(BaseModel):
     """Configuration for indexing, loaded from .glma.toml + CLI flags."""
     languages: list[Language] = Field(
