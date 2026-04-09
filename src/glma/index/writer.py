@@ -72,12 +72,19 @@ def _clean_description(comment: str) -> str:
 def _resolve_target_display(rel: dict) -> str:
     """Format the target display for a relationship.
 
+    Handles self-referential edges (source→source for unresolved targets)
+    by checking if source_id == target_id.
+
     Args:
         rel: Relationship dict with target_name, target_name_resolved, confidence, target_id.
 
     Returns:
         Display string for the target.
     """
+    # Self-referential edge = unresolved target stored as source→source
+    if rel.get("source_id") == rel.get("target_id") and rel.get("source_id"):
+        return f"? ({rel.get('target_name', 'unknown')})"
+
     if rel.get("target_name_resolved") and rel.get("target_id"):
         return rel["target_name_resolved"]
     if rel.get("confidence") == "INFERRED" and not rel.get("target_id"):
@@ -104,6 +111,7 @@ def _format_inline_relationships(chunk_id: str, relationships: list[dict]) -> li
     outgoing = [r for r in relationships
                 if r.get("source_id") == chunk_id
                 and r.get("rel_type") in ("calls", "includes")]
+    # Self-referential edges (source→source) represent unresolved targets
     if outgoing:
         parts = []
         for r in outgoing:
