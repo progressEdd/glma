@@ -93,6 +93,30 @@ class WatchConfig(BaseModel):
     )
 
 
+class ExportConfig(BaseModel):
+    """Configuration for air-gapped export."""
+    output_path: Optional[str] = Field(
+        default=None,
+        description="Output path: directory, .tar.gz/.tgz archive, or '-' for stdout",
+    )
+    include_code: bool = Field(
+        default=True,
+        description="Include full source code in exported chunks",
+    )
+    ai_summaries: bool = Field(
+        default=False,
+        description="Generate AI-powered file summaries via local model",
+    )
+    ai_base_url: str = Field(
+        default="http://localhost:1234/v1",
+        description="OpenAI-compatible API base URL for local model",
+    )
+    ai_model: str = Field(
+        default="default",
+        description="Model name for AI summaries",
+    )
+
+
 class IndexConfig(BaseModel):
     """Configuration for indexing, loaded from .glma.toml + CLI flags."""
     languages: list[Language] = Field(
