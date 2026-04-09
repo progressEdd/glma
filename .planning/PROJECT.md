@@ -34,8 +34,8 @@ Agents can call a single command and get exactly the code context they need to i
 - [ ] Generalized indexer: point at any repo, parse all supported languages, store in graph DB — ✓ DONE in Phase 1
 - [ ] Relationship extraction between code chunks (function calls, imports, class hierarchies, variable references) — ✓ DONE in Phase 2
 - [ ] Semantic search layer on top of graph relationships
-- [ ] CLI query tool: agents call `glma query <filepath>` and get compacted relevant chunks as markdown
-- [ ] Jupyter notebook compaction: flatten `.ipynb` into readable markdown (cell index, code, variables, references)
+- [ ] CLI query tool: agents call `glma query <filepath>` and get compacted relevant chunks as markdown — ✓ DONE in Phase 3
+- [ ] Jupyter notebook compaction: flatten `.ipynb` into readable markdown (cell index, code, variables, references) — ✓ DONE in Phase 3
 - [ ] Markdown as first-class output: human-browsable, agent-readable repo documentation — ✓ DONE in Phase 1
 - [ ] File watcher: detect codebase changes, incrementally update DB and markdown
 - [ ] Air-gapped mode: markdown IS the database — shell-only agents can work from it with no Python/JS runtime
@@ -76,6 +76,10 @@ Agents can call a single command and get exactly the code context they need to i
 | Unresolved targets as self-referential edges | Preserves relationship data even when target chunk isn't indexed; display code handles detection | ✓ Works (Phase 2) |
 | 3-pass pipeline: chunks → relationships → cross-file | Cross-file resolution needs all chunks in DB first; 3 passes ensure correct ordering | ✓ Works (Phase 2) |
 | Import map uses first component for bare imports | `import os.path` → local_name="os" matches how Python actually uses it | ✓ Works (Phase 2) |
+| Query output from DB, not markdown slices | Fresh query output is more compact and relevant than slicing full per-file markdown; decouples query format from storage format | ✓ Good (Phase 3: query formatter working) |
+| Per-statement variable tracking for notebooks | Per-cell is too coarse; per-statement gives agents precise data flow understanding | ✓ Good (Phase 3: variable tracking working) |
+| Notebooks bypass LadybugStore | .ipynb files are self-contained; no need to index into graph DB for compaction | ✓ Good (Phase 3: direct nbformat parsing) |
+| BFS traversal with visited set | Prevents infinite loops on circular relationships; depth cap at 10 in CLI | ✓ Good (Phase 3: traverse_relationships) |
 | Start with C and Python | Both grammars tested, both relevant to the Linux kernel use case and general codebase analysis | ✓ Good (Phase 1: both working) |
 
 ## Evolution
@@ -96,4 +100,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-09 after Phase 2 completion*
+*Last updated: 2026-04-09 after Phase 3 completion*
