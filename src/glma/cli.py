@@ -1,5 +1,6 @@
 """CLI interface for glma."""
 
+import asyncio
 import sys
 from pathlib import Path
 from typing import Optional
@@ -222,3 +223,39 @@ def query(
 
     if stale:
         raise typer.Exit(3)
+
+
+@app.command()
+def watch(
+    path: Optional[Path] = typer.Argument(
+        None,
+        help="Path to repository to watch. Defaults to current directory.",
+    ),
+    verbose: bool = typer.Option(False, "--verbose", "-V", help="Log every file event."),
+    config_file: Optional[Path] = typer.Option(None, "--config", help="Path to .glma.toml config file."),
+    debounce: Optional[float] = typer.Option(None, "--debounce", help="Batch window in seconds."),
+) -> None:
+    """Watch for file changes and incrementally re-index."""
+    from glma.config import load_config, load_watch_config
+
+    repo_path = path.resolve() if path else Path.cwd()
+
+    # Validate repo has been indexed
+    index_config = load_config(repo_path)
+    db_path = repo_path / index_config.output_dir / "db" / "index.lbug"
+    if not db_path.exists():
+        console.print("[red]Error: No index found. Run `glma index` first.[/red]")
+        raise typer.Exit(4)
+
+    # Build watch CLI overrides
+    watch_overrides: dict = {}
+    if verbose:
+        watch_overrides["verbose"] = True
+    if debounce is not None:
+        watch_overrides["debounce_seconds"] = debounce
+
+    watch_config = load_watch_config(repo_path, watch_overrides)
+
+    # Run the async watcher
+    from glma.watch import watch_and_index
+    asyncio.run(watch_and_index(repo_path, index_config, watch_config, console=console))
