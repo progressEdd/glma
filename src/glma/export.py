@@ -1,0 +1,631 @@
+"""Air-gapped markdown export for full index serialization."""
+
+import io
+import sys
+import tarfile
+import logging
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Optional
+
+from glma.db.ladybug_store import LadybugStore
+from glma.models import Chunk, ChunkType, ExportConfig
+
+logger = logging.getLogger(__name__)
+
+
+def generate_rule_summary(
+    file_path: str,
+    chunks: list[Chunk],
+    relationships: list[dict],
+) -> str:
+    """Generate deterministic file summary from chunk + relationship data.
+
+    No LLM needed. Lists top-level exports and imports.
+
+    Args:
+        file_path: Relative file path.
+        chunks: All chunks for the file.
+        relationships: All relationships for the file.
+
+    Returns:
+        Human-readable summary string.
+    """
+    functions = [c for c in chunks if c.chunk_type == ChunkType.FUNCTION]
+    classes = [c for c in chunks if c.chunk_type == ChunkType.CLASS]
+    methods = [c for c in chunks if c.chunk_type == ChunkType.METHOD]
+
+    parts: list[str] = []
+
+    if functions:
+        names = ", ".join(f.name for f in functions[:10])
+        suffix = f" and {len(functions) - 10} more" if len(functions) > 10 else ""
+        parts.append(f"{len(functions)} function(s): {names}{suffix}")
+
+    if classes:
+        names = ", ".join(c.name for c in classes)
+        parts.append(f"{len(classes)} class(es): {names}")
+
+    if methods:
+        parts.append(f"{len(methods)} method(s)")
+
+    # Extract unique import/include targets
+    imports = sorted({r.get("target_name", "") for r in relationships if r.get("rel_type") == "imports" and r.get("target_name")})
+    includes = sorted({r.get("target_name", "") for r in relationships if r.get("rel_type") == "includes" and r.get("target_name")})
+
+    if imports:
+        imp_str = ", ".join(imports[:15])
+        suffix = f" and {len(imports) - 15} more" if len(imports) > 15 else ""
+        parts.append(f"Imports: {imp_str}{suffix}")
+
+    if includes:
+        inc_str = ", ".join(includes[:15])
+        parts.append(f"Includes: {inc_str}")
+
+    return ". ".join(parts) + "." if parts else f"File with {len(chunks)} chunk(s)."
+
+
+def generate_ai_summary(
+    file_path: str,
+    chunks: list[Chunk],
+    base_url: str,
+    model: str = "default",
+) -> str:
+    """Generate AI-powered file summary using a local model.
+
+    Uses OpenAI-compatible API (works with LM Studio, Ollama, llama.cpp server).
+
+    Args:
+        file_path: Relative file path.
+        chunks: All chunks for the file.
+        base_url: OpenAI-compatible API base URL.
+        model: Model name to use.
+
+    Returns:
+        AI-generated summary string, or error message on failure.
+    """
+    try:
+        from openai import OpenAI
+    except ImportError:
+        return "AI summaries require the 'openai' package. Install with: uv add openai"
+
+    try:
+        client = OpenAI(base_url=base_url, api_key="not-needed")
+
+        # Build compact context from chunks
+        code_context = f"File: {file_path}\n"
+        for chunk in chunks[:20]:
+            code_context += f"- {chunk.chunk_type.value} {chunk.name} (L{chunk.start_line}-L{chunk.end_line})"
+            if chunk.summary:
+                code_context += f": {chunk.summary}"
+            code_context += "\n"
+
+        response = client.chat.completions.create(
+            model=model,
+            messages=[
+                {
+                    "role": "system",
+                    "content": "Summarize this source file in 1-2 sentences for a developer. Focus on purpose and key exports.",
+                },
+                {"role": "user", "content": code_context},
+            ],
+            max_tokens=150,
+            timeout=10.0,
+        )
+        return response.choices[0].message.content.strip()
+    except Exception as e:
+        logger.warning(f"AI summary failed for {file_path}: {e}")
+        return f"AI summary unavailable: {e}"
+
+
+def _format_export_file(
+    file_path: str,
+    file_record: Optional[object],
+    chunks: list[Chunk],
+    relationships: list[dict],
+    config: ExportConfig,
+) -> str:
+    """Generate enriched markdown for a single file in the export.
+
+    Includes metadata header, file summary, chunks, and relationships.
+
+    Args:
+        file_path: Relative file path from repo root.
+        file_record: FileRecord object (or None if metadata unavailable).
+        chunks: All chunks for the file.
+        relationships: All relationships for the file.
+        config: Export configuration.
+
+    Returns:
+        Complete markdown string for this file.
+    """
+    lines: list[str] = []
+
+    # Metadata header (YAML frontmatter)
+    lines.append("---")
+    lines.append(f"file_path: {file_path}")
+    if file_record:
+        lang_val = file_record.language.value if hasattr(file_record.language, 'value') else str(file_record.language)
+        lines.append(f"language: {lang_val}")
+        lines.append(f"last_indexed: {file_record.last_indexed}")
+        lines.append(f"chunk_count: {file_record.chunk_count}")
+        lines.append(f"content_hash: {file_record.content_hash}")
+    lines.append("---")
+    lines.append("")
+
+    # File heading
+    lines.append(f"# {file_path}")
+    lines.append("")
+
+    # Summary section
+    lines.append("## Summary")
+    lines.append("")
+    if config.ai_summaries:
+        ai_summary = generate_ai_summary(file_path, chunks, config.ai_base_url, config.ai_model)
+        lines.append(ai_summary)
+    else:
+        rule_summary = generate_rule_summary(file_path, chunks, relationships)
+        lines.append(rule_summary)
+    lines.append("")
+
+    # Key Exports table
+    lines.append("## Key Exports")
+    lines.append("")
+    lines.append("| Name | Type | Line Range | Description |")
+    lines.append("| ---- | ---- | ---------- | ----------- |")
+
+    exports = [c for c in chunks if c.parent_id is None]
+    if exports:
+        for chunk in exports:
+            desc = ""
+            if chunk.attached_comments:
+                desc = chunk.attached_comments[0].strip()[:80]
+            lines.append(f"| {chunk.name} | {chunk.chunk_type.value} | L{chunk.start_line}-L{chunk.end_line} | {desc} |")
+    else:
+        lines.append("| *(no exports found)* | | | |")
+    lines.append("")
+
+    # Chunks section
+    lines.append("## Chunks")
+    lines.append("")
+
+    for chunk in chunks:
+        lines.append(f"### {chunk.name} ({chunk.chunk_type.value}, L{chunk.start_line}-L{chunk.end_line})")
+        lines.append("")
+
+        if config.include_code:
+            # Language hint for code block
+            lang_hint = ""
+            if file_path.endswith(".py"):
+                lang_hint = "python"
+            elif file_path.endswith(".c") or file_path.endswith(".h"):
+                lang_hint = "c"
+            lines.append(f"```{lang_hint}")
+            lines.append(chunk.content)
+            lines.append("```")
+        else:
+            lines.append(f"*(Code omitted. Signature: L{chunk.start_line}-L{chunk.end_line})*")
+
+        # Inline relationships
+        chunk_rels = [r for r in relationships if r.get("source_id") == chunk.id]
+        if chunk_rels:
+            parts = []
+            for r in chunk_rels:
+                target = r.get("target_name", "?")
+                if r.get("source_id") == r.get("target_id"):
+                    target = f"? ({r.get('target_name', 'unknown')})"
+                conf = r.get("confidence", "INFERRED")
+                parts.append(f"{target} ({conf})")
+            if parts:
+                lines.append(f"> **Calls:** {', '.join(parts)}")
+
+        lines.append("")
+
+    # Relationships section
+    if relationships:
+        lines.append("## Relationships")
+        lines.append("")
+
+        # Group by type
+        by_type: dict[str, list[dict]] = {}
+        for r in relationships:
+            rt = r.get("rel_type", "unknown")
+            by_type.setdefault(rt, []).append(r)
+
+        chunk_ids = {c.id for c in chunks}
+
+        # Outgoing calls
+        out_calls = [r for r in by_type.get("calls", []) if r.get("source_id") in chunk_ids]
+        if out_calls:
+            lines.append("### Outgoing Calls")
+            lines.append("")
+            lines.append("| From | To | Confidence | Line |")
+            lines.append("| ---- | -- | ---------- | ---- |")
+            for r in out_calls:
+                from_name = r.get("source_name", "?")
+                target = r.get("target_name_resolved", r.get("target_name", "?"))
+                if r.get("source_id") == r.get("target_id"):
+                    target = f"? ({r.get('target_name', 'unknown')})"
+                lines.append(f"| {from_name} | {target} | {r.get('confidence', '')} | L{r.get('source_line', '')} |")
+            lines.append("")
+
+        # Incoming calls
+        incoming_calls = [r for r in relationships if r.get("rel_type") == "calls" and r.get("direction") == "incoming"]
+        if incoming_calls:
+            lines.append("### Incoming Calls")
+            lines.append("")
+            lines.append("| From | To | Confidence |")
+            lines.append("| ---- | -- | ---------- |")
+            for r in incoming_calls:
+                lines.append(f"| {r.get('source_name', '?')} | {r.get('target_name', '?')} | {r.get('confidence', '')} |")
+            lines.append("")
+
+        # Imports
+        imports = [r for r in by_type.get("imports", []) if r.get("source_id") in chunk_ids]
+        if imports:
+            lines.append("### Imports")
+            lines.append("")
+            lines.append("| Import | Confidence |")
+            lines.append("| ------ | ---------- |")
+            for r in imports:
+                lines.append(f"| {r.get('target_name', '')} | {r.get('confidence', '')} |")
+            lines.append("")
+
+        # Includes (C)
+        includes = [r for r in by_type.get("includes", []) if r.get("source_id") in chunk_ids]
+        if includes:
+            lines.append("### Includes")
+            lines.append("")
+            lines.append("| Include | Confidence |")
+            lines.append("| ------- | ---------- |")
+            for r in includes:
+                lines.append(f"| {r.get('target_name', '')} | {r.get('confidence', '')} |")
+            lines.append("")
+
+        # Inherits
+        inherits = [r for r in by_type.get("inherits", []) if r.get("source_id") in chunk_ids]
+        if inherits:
+            lines.append("### Inherits")
+            lines.append("")
+            lines.append("| Class | Base | Confidence |")
+            lines.append("| ----- | ---- | ---------- |")
+            for r in inherits:
+                from_name = r.get("source_name", "?")
+                target = r.get("target_name_resolved", r.get("target_name", "?"))
+                lines.append(f"| {from_name} | {target} | {r.get('confidence', '')} |")
+            lines.append("")
+
+    return "\n".join(lines)
+
+
+def _format_rel_path(file_path: str) -> str:
+    """Convert file path to export-relative path for links.
+
+    Example: src/auth/login.py -> src/auth/login.py.md
+    """
+    return file_path + ".md"
+
+
+def generate_index_md(
+    indexed_files: dict,
+    file_data: dict[str, dict],
+) -> str:
+    """Generate the root INDEX.md with file listing and statistics.
+
+    Args:
+        indexed_files: Dict of {path: content_hash} from store.get_indexed_files().
+        file_data: Dict of {path: {"chunks": [...], "record": FileRecord, "summary": str}}.
+
+    Returns:
+        Complete INDEX.md markdown string.
+    """
+    lines: list[str] = []
+
+    lines.append("# Codebase Index")
+    lines.append("")
+    lines.append(f"**Generated:** {datetime.now(timezone.utc).isoformat()}")
+    lines.append(f"**Total Files:** {len(indexed_files)}")
+
+    total_chunks = sum(len(d.get("chunks", [])) for d in file_data.values())
+    lines.append(f"**Total Chunks:** {total_chunks}")
+    lines.append("")
+
+    # File table
+    lines.append("## Files")
+    lines.append("")
+    lines.append("| File | Language | Chunks | Summary |")
+    lines.append("| ---- | -------- | ------ | ------- |")
+
+    for path in sorted(indexed_files.keys()):
+        data = file_data.get(path, {})
+        record = data.get("record")
+        chunks = data.get("chunks", [])
+        summary = data.get("summary", "")
+
+        lang = record.language.value if record and hasattr(record, "language") else "?"
+        chunk_count = len(chunks)
+        rel_link = _format_rel_path(path)
+
+        # Truncate summary for table display
+        short_summary = summary[:60] + "..." if len(summary) > 60 else summary
+
+        lines.append(f"| [{path}]({rel_link}) | {lang} | {chunk_count} | {short_summary} |")
+
+    lines.append("")
+
+    # Statistics
+    lines.append("## Statistics")
+    lines.append("")
+
+    all_chunks = []
+    for d in file_data.values():
+        all_chunks.extend(d.get("chunks", []))
+
+    func_count = sum(1 for c in all_chunks if c.chunk_type == ChunkType.FUNCTION)
+    class_count = sum(1 for c in all_chunks if c.chunk_type == ChunkType.CLASS)
+    method_count = sum(1 for c in all_chunks if c.chunk_type == ChunkType.METHOD)
+
+    lines.append(f"- Total functions: {func_count}")
+    lines.append(f"- Total classes: {class_count}")
+    lines.append(f"- Total methods: {method_count}")
+    lines.append(f"- Total files: {len(indexed_files)}")
+    lines.append("")
+
+    return "\n".join(lines)
+
+
+def generate_relationships_md(
+    file_data: dict[str, dict],
+) -> str:
+    """Generate the root RELATIONSHIPS.md with full cross-file dependency graph.
+
+    Args:
+        file_data: Dict of {path: {"chunks": [...], "relationships": [...]}}.
+
+    Returns:
+        Complete RELATIONSHIPS.md markdown string.
+    """
+    lines: list[str] = []
+
+    lines.append("# Cross-File Relationships")
+    lines.append("")
+    lines.append(f"**Generated:** {datetime.now(timezone.utc).isoformat()}")
+    lines.append("")
+
+    # Collect all cross-file relationships
+    cross_file_rels: list[dict] = []
+    for path, data in file_data.items():
+        rels = data.get("relationships", [])
+        chunks = data.get("chunks", [])
+        chunk_ids = {c.id for c in chunks}
+
+        for rel in rels:
+            source_id = rel.get("source_id", "")
+            target_id = rel.get("target_id", "")
+
+            # Skip self-referential (unresolved) edges for cross-file display
+            if source_id == target_id:
+                continue
+            # We only want relationships where source and target are in different files
+            if source_id in chunk_ids and target_id not in chunk_ids:
+                cross_file_rels.append({
+                    "source_file": path,
+                    "source_name": rel.get("source_name", "?"),
+                    "rel_type": rel.get("rel_type", "?"),
+                    "target_name": rel.get("target_name_resolved", rel.get("target_name", "?")),
+                })
+
+    total = len(cross_file_rels)
+    lines.append(f"**Total Cross-File Relationships:** {total}")
+    lines.append("")
+
+    if cross_file_rels:
+        lines.append("## Dependency Graph")
+        lines.append("")
+        lines.append("| Source File | Source Chunk | Type | Target |")
+        lines.append("| ----------- | ------------ | ---- | ------ |")
+
+        for rel in sorted(cross_file_rels, key=lambda r: (r["source_file"], r["rel_type"])):
+            src_link = f"[{rel['source_file']}]({_format_rel_path(rel['source_file'])})"
+            lines.append(f"| {src_link} | {rel['source_name']} | {rel['rel_type']} | {rel['target_name']} |")
+
+        lines.append("")
+
+    # Per-file dependency summary
+    lines.append("## File Dependencies")
+    lines.append("")
+
+    for path in sorted(file_data.keys()):
+        rels = file_data[path].get("relationships", [])
+        chunks = file_data[path].get("chunks", [])
+        chunk_ids = {c.id for c in chunks}
+
+        imported_by: set[str] = set()
+        imports_from: set[str] = set()
+        called_by: set[str] = set()
+        calls_to: set[str] = set()
+
+        for rel in rels:
+            if rel.get("direction") == "incoming":
+                src_id = rel.get("source_id", "")
+                src_file = src_id.split("::")[0] if "::" in src_id else ""
+                if src_file and src_file != path:
+                    if rel.get("rel_type") == "imports":
+                        imported_by.add(src_file)
+                    elif rel.get("rel_type") == "calls":
+                        called_by.add(src_file)
+            else:
+                target_id = rel.get("target_id", "")
+                target_file = target_id.split("::")[0] if "::" in target_id else ""
+                if target_file and target_file != path and target_id not in chunk_ids:
+                    if rel.get("rel_type") == "imports":
+                        imports_from.add(target_file)
+                    elif rel.get("rel_type") == "calls":
+                        calls_to.add(target_file)
+
+        if imported_by or imports_from or called_by or calls_to:
+            lines.append(f"### {path}")
+            lines.append("")
+            if imports_from:
+                links = ", ".join(f"[{f}]({_format_rel_path(f)})" for f in sorted(imports_from))
+                lines.append(f"**Imports from:** {links}")
+            if imported_by:
+                links = ", ".join(f"[{f}]({_format_rel_path(f)})" for f in sorted(imported_by))
+                lines.append(f"**Imported by:** {links}")
+            if calls_to:
+                links = ", ".join(f"[{f}]({_format_rel_path(f)})" for f in sorted(calls_to))
+                lines.append(f"**Calls:** {links}")
+            if called_by:
+                links = ", ".join(f"[{f}]({_format_rel_path(f)})" for f in sorted(called_by))
+                lines.append(f"**Called by:** {links}")
+            lines.append("")
+
+    return "\n".join(lines)
+
+
+def export_index(
+    repo_root: Path,
+    config: ExportConfig,
+    store: LadybugStore,
+    console: Optional[object] = None,
+) -> Path:
+    """Export the full index as static markdown files.
+
+    Supports three output modes:
+    - Directory: --output ./dir
+    - Archive: --output export.tar.gz
+    - Stdout: --output -
+
+    Args:
+        repo_root: Absolute path to repository root.
+        config: Export configuration.
+        store: LadybugStore instance.
+        console: Rich console for progress output.
+
+    Returns:
+        Path to the output (directory or archive file). For stdout mode, returns Path("-").
+    """
+    indexed_files = store.get_indexed_files()
+
+    if console:
+        console.print(f"[bold]glma[/bold] exporting [cyan]{len(indexed_files)}[/cyan] indexed files")
+
+    # Load all file data from store
+    file_data: dict[str, dict] = {}
+    for file_path in sorted(indexed_files.keys()):
+        record = store.get_file_record(file_path)
+        chunks = store.get_chunks_for_file(file_path)
+        relationships = store.get_file_relationships(file_path)
+
+        # Generate rule-based summary
+        summary = generate_rule_summary(file_path, chunks, relationships)
+
+        file_data[file_path] = {
+            "record": record,
+            "chunks": chunks,
+            "relationships": relationships,
+            "summary": summary,
+        }
+
+    # Generate per-file export markdown
+    file_exports: dict[str, str] = {}
+    for file_path, data in file_data.items():
+        export_md = _format_export_file(
+            file_path,
+            data["record"],
+            data["chunks"],
+            data["relationships"],
+            config,
+        )
+        file_exports[file_path] = export_md
+
+    # Generate root files
+    index_md = generate_index_md(indexed_files, file_data)
+    rels_md = generate_relationships_md(file_data)
+
+    # Determine output mode
+    output = config.output_path or "glma-export"
+
+    if output == "-":
+        # Stdout mode: stream tar to stdout
+        _write_tar_to_stream(sys.stdout.buffer, file_exports, index_md, rels_md)
+        return Path("-")
+    elif output.endswith(".tar.gz") or output.endswith(".tgz"):
+        # Archive mode
+        output_path = Path(output)
+        with open(output_path, "wb") as f:
+            _write_tar_to_stream(f, file_exports, index_md, rels_md)
+        if console:
+            console.print(f"[green]✓[/green] Exported to {output_path}")
+        return output_path
+    else:
+        # Directory mode
+        output_dir = Path(output)
+        output_dir.mkdir(parents=True, exist_ok=True)
+        _write_files_to_dir(output_dir, file_exports, index_md, rels_md)
+        if console:
+            console.print(f"[green]✓[/green] Exported to {output_dir}/")
+        return output_dir
+
+
+def _write_files_to_dir(
+    output_dir: Path,
+    file_exports: dict[str, str],
+    index_md: str,
+    rels_md: str,
+) -> None:
+    """Write export files to a directory.
+
+    Args:
+        output_dir: Target directory.
+        file_exports: Dict of {relative_path: markdown_content}.
+        index_md: INDEX.md content.
+        rels_md: RELATIONSHIPS.md content.
+    """
+    # Write per-file exports
+    for file_path, content in file_exports.items():
+        # Create nested mirror structure: export/src/auth/login.py.md
+        md_path = output_dir / (file_path + ".md")
+        md_path.parent.mkdir(parents=True, exist_ok=True)
+        md_path.write_text(content, encoding="utf-8")
+
+    # Write INDEX.md
+    (output_dir / "INDEX.md").write_text(index_md, encoding="utf-8")
+
+    # Write RELATIONSHIPS.md
+    (output_dir / "RELATIONSHIPS.md").write_text(rels_md, encoding="utf-8")
+
+
+def _write_tar_to_stream(
+    stream: io.RawIOBase,
+    file_exports: dict[str, str],
+    index_md: str,
+    rels_md: str,
+) -> None:
+    """Write export as tar.gz archive to a stream.
+
+    Args:
+        stream: Writable binary stream (file or stdout.buffer).
+        file_exports: Dict of {relative_path: markdown_content}.
+        index_md: INDEX.md content.
+        rels_md: RELATIONSHIPS.md content.
+    """
+    with tarfile.open(fileobj=stream, mode="w|gz") as tar:
+        # Add per-file exports
+        for file_path, content in file_exports.items():
+            data = content.encode("utf-8")
+            info = tarfile.TarInfo(name=file_path + ".md")
+            info.size = len(data)
+            tar.addfile(info, io.BytesIO(data))
+
+        # Add INDEX.md
+        data = index_md.encode("utf-8")
+        info = tarfile.TarInfo(name="INDEX.md")
+        info.size = len(data)
+        tar.addfile(info, io.BytesIO(data))
+
+        # Add RELATIONSHIPS.md
+        data = rels_md.encode("utf-8")
+        info = tarfile.TarInfo(name="RELATIONSHIPS.md")
+        info.size = len(data)
+        tar.addfile(info, io.BytesIO(data))
