@@ -32,7 +32,7 @@ Agents can call a single command and get exactly the code context they need to i
 <!-- Current scope. Building toward these. -->
 
 - [ ] Generalized indexer: point at any repo, parse all supported languages, store in graph DB — ✓ DONE in Phase 1
-- [ ] Relationship extraction between code chunks (function calls, imports, class hierarchies, variable references)
+- [ ] Relationship extraction between code chunks (function calls, imports, class hierarchies, variable references) — ✓ DONE in Phase 2
 - [ ] Semantic search layer on top of graph relationships
 - [ ] CLI query tool: agents call `glma query <filepath>` and get compacted relevant chunks as markdown
 - [ ] Jupyter notebook compaction: flatten `.ipynb` into readable markdown (cell index, code, variables, references)
@@ -73,7 +73,9 @@ Agents can call a single command and get exactly the code context they need to i
 | Ladybug (real_ladybug) for storage | Embedded graph DB with native vector indices + full-text search + Cypher queries; ex-Kuzu so hackathon code directly reusable | ✓ Good (Phase 1: LadybugStore working) |
 | Markdown as first-class output | Required for air-gapped environments; also human-browsable and directly consumable by any LLM | ✓ Good (Phase 1: layered markdown output) |
 | Tree-sitter for parsing | Already proven in hackathon, supports 40+ languages, incremental parsing available | ✓ Good (Phase 1: C + Python parsing working) |
-| Incremental updates via file watcher | Large repos can't be re-indexed from scratch on every change | - Pending (Phase 4) |
+| Unresolved targets as self-referential edges | Preserves relationship data even when target chunk isn't indexed; display code handles detection | ✓ Works (Phase 2) |
+| 3-pass pipeline: chunks → relationships → cross-file | Cross-file resolution needs all chunks in DB first; 3 passes ensure correct ordering | ✓ Works (Phase 2) |
+| Import map uses first component for bare imports | `import os.path` → local_name="os" matches how Python actually uses it | ✓ Works (Phase 2) |
 | Start with C and Python | Both grammars tested, both relevant to the Linux kernel use case and general codebase analysis | ✓ Good (Phase 1: both working) |
 
 ## Evolution
@@ -94,4 +96,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-08 after Phase 1 completion*
+*Last updated: 2026-04-09 after Phase 2 completion*
