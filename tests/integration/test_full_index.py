@@ -156,3 +156,126 @@ class TestFullIndex:
         """Total chunks across all files should be at least 8."""
         root, result = self._index_project(tmp_path)
         assert result.total_chunks >= 8
+
+
+class TestFullIndexWithRelationships:
+    """Test complete indexing with relationship extraction."""
+
+    @staticmethod
+    def _create_rel_project(tmp_path):
+        """Create a multi-file Python project with cross-file relationships."""
+        root = tmp_path / "relproject"
+        root.mkdir()
+
+        (root / "animal.py").write_text("""\
+class Animal:
+    def speak(self):
+        raise NotImplementedError
+""")
+
+        (root / "dog.py").write_text("""\
+from animal import Animal
+
+class Dog(Animal):
+    def speak(self):
+        return "woof"
+
+    def fetch(self):
+        return self.speak()
+""")
+
+        (root / "main.py").write_text("""\
+from dog import Dog
+
+def make_pet():
+    d = Dog()
+    return d.speak()
+""")
+
+        cfg = IndexConfig(quiet=True)
+        result = run_index(root, cfg)
+        return root, result
+
+    def test_relationships_extracted(self, tmp_path):
+        root, result = self._create_rel_project(tmp_path)
+        assert result.total_relationships > 0
+
+    def test_dog_inherits_animal(self, tmp_path):
+        root, result = self._create_rel_project(tmp_path)
+        md_path = root / ".glma-index" / "markdown" / "dog.py.md"
+        assert md_path.exists()
+        content = md_path.read_text()
+        assert "## Relationships" in content
+
+    def test_self_method_resolved(self, tmp_path):
+        root, result = self._create_rel_project(tmp_path)
+        db_path = root / ".glma-index" / "db" / "index.lbug"
+        store = LadybugStore(db_path)
+        # Dog.fetch should call self.speak
+        rels = store.get_file_relationships("dog.py")
+        assert len(rels) > 0
+        store.close()
+
+    def test_main_calls_dog(self, tmp_path):
+        root, result = self._create_rel_project(tmp_path)
+        md_path = root / ".glma-index" / "markdown" / "main.py.md"
+        assert md_path.exists()
+        content = md_path.read_text()
+        # Should have relationships section
+        assert "## Relationships" in content or "## Key Exports" in content
+
+    def test_incremental_reindex_updates_relationships(self, tmp_path):
+        """Modifying a file should update its relationships."""
+        root, result = self._create_rel_project(tmp_path)
+
+        # Modify main.py
+        (root / "main.py").write_text("""\
+from dog import Dog
+
+def make_pet():
+    d = Dog()
+    d.speak()
+    d.fetch()
+    return d
+""")
+
+        cfg = IndexConfig(quiet=True)
+        result2 = run_index(root, cfg)
+        assert result2.updated_files == 1
+        assert result2.skipped_files == 2  # animal.py, dog.py unchanged
+
+    def test_c_file_relationships(self, tmp_path):
+        """C files should have INCLUDES and CALLS relationships."""
+        root = tmp_path / "cproject"
+        root.mkdir()
+
+        (root / "utils.h").write_text("int helper();\n")
+        (root / "utils.c").write_text("""\
+#include "utils.h"
+int helper() { return 42; }
+""")
+        (root / "main.c").write_text("""\
+#include <stdio.h>
+#include "utils.h"
+int main() {
+    printf("hello");
+    return helper();
+}
+""")
+
+        cfg = IndexConfig(quiet=True)
+        result = run_index(root, cfg)
+        assert result.total_files == 3
+
+        # Check relationships extracted
+        db_path = root / ".glma-index" / "db" / "index.lbug"
+        store = LadybugStore(db_path)
+        rels = store.get_file_relationships("main.c")
+        assert len(rels) > 0
+        store.close()
+
+        # Check markdown
+        md_path = root / ".glma-index" / "markdown" / "main.c.md"
+        assert md_path.exists()
+        content = md_path.read_text()
+        assert "## Relationships" in content

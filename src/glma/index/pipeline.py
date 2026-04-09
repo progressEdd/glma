@@ -5,12 +5,13 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
-from glma.models import Chunk, FileRecord, IndexConfig, Language
+from glma.models import Chunk, ChunkType, FileRecord, IndexConfig, Language
 from glma.db.ladybug_store import LadybugStore
 from glma.index.chunks import extract_chunks
 from glma.index.comments import attach_comments
 from glma.index.detector import detect_language
 from glma.index.progress import IndexProgress
+from glma.index.relationships import extract_relationships
 from glma.index.walker import walk_source_files
 from glma.index.writer import write_markdown
 
@@ -36,6 +37,7 @@ class IndexResult:
     skipped_files: int = 0
     deleted_files: int = 0
     total_chunks: int = 0
+    total_relationships: int = 0
 
 
 def run_index(
@@ -118,9 +120,9 @@ def run_index(
         store.upsert_file(file_record)
         store.upsert_chunks(relative_path, chunks)
 
-        # Write markdown output
+        # Write markdown output (without relationships — Pass 1)
         if chunks:
-            write_markdown(chunks, repo_root, config.output_dir)
+            write_markdown(chunks, repo_root, config.output_dir, relationships=[])
 
         if is_new:
             result.new_files += 1
@@ -132,9 +134,84 @@ def run_index(
         if progress:
             progress.advance(relative_path)
 
+    # Pass 2: Extract relationships (requires all chunks in DB for cross-file resolution)
+    if progress:
+        progress._console.print("[dim]Extracting relationships...[/dim]")
+
+    for filepath, language_name in source_files:
+        language = Language(language_name)
+        relative_path = str(filepath.relative_to(repo_root))
+
+        try:
+            current_hash = file_content_hash(filepath)
+        except (OSError, IOError):
+            continue
+
+        stored_hash = indexed_files.get(relative_path)
+        if stored_hash == current_hash and relative_path not in source_paths:
+            continue
+
+        # Only process files that were actually updated in Pass 1
+        if stored_hash == current_hash:
+            continue
+
+        # Get chunks for this file from the DB
+        chunks = _load_chunks_from_store(store, relative_path)
+        if not chunks:
+            continue
+
+        # Extract relationships
+        relationships = extract_relationships(filepath, language, repo_root, chunks, store)
+        store.upsert_relationships(relative_path, relationships)
+        result.total_relationships += len(relationships)
+
+        # Re-write markdown with relationships
+        file_rels = store.get_file_relationships(relative_path)
+        write_markdown(chunks, repo_root, config.output_dir, relationships=file_rels)
+
+    # Pass 3: Cross-file incoming relationships — final markdown rewrite
+    for filepath, language_name in source_files:
+        language = Language(language_name)
+        relative_path = str(filepath.relative_to(repo_root))
+
+        chunks = _load_chunks_from_store(store, relative_path)
+        if not chunks:
+            continue
+
+        # Get outgoing relationships
+        all_rels = store.get_file_relationships(relative_path)
+
+        # Get incoming cross-file relationships
+        for chunk in chunks:
+            incoming = store.get_incoming_relationships(chunk.id)
+            for rel in incoming:
+                # Get source file path
+                try:
+                    source_result = store.conn.execute(
+                        "MATCH (c:Chunk {id: $sid}) RETURN c.file_path",
+                        {"sid": rel["source_id"]},
+                    )
+                    source_rows = list(source_result)
+                    if source_rows and source_rows[0][0] != relative_path:
+                        all_rels.append({
+                            "source_id": rel["source_id"],
+                            "source_name": rel["source_chunk_name"],
+                            "rel_type": rel["rel_type"],
+                            "confidence": rel["confidence"],
+                            "source_line": rel["source_line"],
+                            "target_name": relative_path,
+                            "target_id": chunk.id,
+                            "direction": "incoming",
+                        })
+                except Exception:
+                    pass
+
+        write_markdown(chunks, repo_root, config.output_dir, relationships=all_rels)
+
     # Phase 3: Delete removed files
     deleted_paths = indexed_paths - source_paths
     for path_to_delete in deleted_paths:
+        store.delete_relationships(path_to_delete)
         store.delete_file(path_to_delete)
         # Also remove markdown file if it exists
         md_path = repo_root / config.output_dir / "markdown" / Path(path_to_delete).with_suffix(".md")
@@ -153,3 +230,28 @@ def run_index(
         )
 
     return result
+
+
+def _load_chunks_from_store(store: LadybugStore, file_path: str) -> list[Chunk]:
+    """Load chunks for a file from the LadybugStore.
+
+    Args:
+        store: LadybugStore instance.
+        file_path: Relative file path.
+
+    Returns:
+        List of Chunk objects.
+    """
+    result = store.conn.execute(
+        "MATCH (c:Chunk {file_path: $fp}) RETURN c.id, c.name, c.chunk_type, c.file_path, c.content, c.summary, c.start_line, c.end_line, c.content_hash, c.parent_id",
+        {"fp": file_path},
+    )
+    chunks = []
+    for row in result:
+        chunks.append(Chunk(
+            id=row[0], name=row[1], chunk_type=ChunkType(row[2]),
+            file_path=row[3], content=row[4], summary=row[5] or None,
+            start_line=row[6], end_line=row[7], content_hash=row[8],
+            parent_id=row[9] or None,
+        ))
+    return chunks
