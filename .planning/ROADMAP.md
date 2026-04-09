@@ -47,7 +47,7 @@ Plans:
   3. Class inheritance is extracted (class A extends class B) and visible in markdown output
   4. Each relationship is tagged as DIRECT or INFERRED based on analysis confidence
   5. `self.method()` calls are resolved to the correct class method
-**Plans**: TBD
+**Plans**: 3 plans across 3 waves
 
 Plans:
 - [ ] 02-01: Relationship data model, LanceDB relationships table, C relationship extraction
@@ -94,6 +94,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Core Indexing Pipeline | 4/4 | Complete | 2026-04-08 |
-| 2. Relationship Extraction | 0/3 | Not started | - |
+| 2. Relationship Extraction | 0/3 | Planned | - |
 | 3. Query Tool & Notebook Compaction | 0/3 | Not started | - |
 | 4. File Watching & Air-Gapped Export | 0/2 | Not started | - |
