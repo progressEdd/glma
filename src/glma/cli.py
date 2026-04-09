@@ -259,3 +259,68 @@ def watch(
     # Run the async watcher
     from glma.watch import watch_and_index
     asyncio.run(watch_and_index(repo_path, index_config, watch_config, console=console))
+
+
+@app.command()
+def export(
+    path: Optional[Path] = typer.Argument(
+        None,
+        help="Path to indexed repository. Defaults to current directory.",
+    ),
+    output: str = typer.Option(
+        ".",
+        "--output",
+        "-o",
+        help="Output path: directory, .tar.gz archive, or '-' for stdout pipe.",
+    ),
+    ai_summaries: bool = typer.Option(
+        False,
+        "--ai-summaries",
+        help="Generate AI summaries via local model (LM Studio, Ollama, etc.).",
+    ),
+    ai_url: Optional[str] = typer.Option(
+        None,
+        "--ai-url",
+        help="Local model API URL (default: http://localhost:1234/v1).",
+    ),
+    no_code: bool = typer.Option(
+        False,
+        "--no-code",
+        help="Omit full source code from export (signatures only).",
+    ),
+    config_file: Optional[Path] = typer.Option(
+        None,
+        "--config",
+        help="Path to .glma.toml config file.",
+    ),
+) -> None:
+    """Export the full index as static markdown for air-gapped consumption."""
+    from glma.config import load_config, load_export_config
+
+    repo_path = path.resolve() if path else Path.cwd()
+
+    # Validate repo has been indexed
+    index_config = load_config(repo_path)
+    db_path = repo_path / index_config.output_dir / "db" / "index.lbug"
+    if not db_path.exists():
+        console.print("[red]Error: No index found. Run `glma index` first.[/red]")
+        raise typer.Exit(4)
+
+    # Build export CLI overrides
+    export_overrides: dict = {}
+    export_overrides["output_path"] = output if output != "." else None
+    if ai_summaries:
+        export_overrides["ai_summaries"] = True
+    if ai_url:
+        export_overrides["ai_base_url"] = ai_url
+    if no_code:
+        export_overrides["include_code"] = False
+
+    export_config = load_export_config(repo_path, export_overrides)
+
+    # Run export
+    from glma.db.ladybug_store import LadybugStore
+    from glma.export import export_index
+
+    store = LadybugStore(db_path)
+    export_index(repo_path, export_config, store, console=console)
