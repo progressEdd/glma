@@ -45,6 +45,30 @@ class FileRecord(BaseModel):
     chunk_count: int = Field(default=0)
 
 
+class RelType(str, Enum):
+    """Types of structural relationships between code chunks."""
+    CALLS = "calls"
+    IMPORTS = "imports"
+    INHERITS = "inherits"
+    INCLUDES = "includes"  # C-specific: #include relationships
+
+
+class Confidence(str, Enum):
+    """Confidence level for relationship extraction."""
+    DIRECT = "DIRECT"
+    INFERRED = "INFERRED"
+
+
+class Relationship(BaseModel):
+    """A structural relationship between two code chunks."""
+    source_id: str = Field(..., description="Chunk ID of the source")
+    target_id: str = Field(default="", description="Chunk ID of target (empty if unresolved)")
+    target_name: str = Field(..., description="Name as it appears in source code")
+    rel_type: RelType
+    confidence: Confidence
+    source_line: int = Field(..., ge=1, description="Line where relationship originates")
+
+
 class IndexConfig(BaseModel):
     """Configuration for indexing, loaded from .glma.toml + CLI flags."""
     languages: list[Language] = Field(

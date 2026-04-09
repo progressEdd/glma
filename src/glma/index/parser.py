@@ -23,6 +23,11 @@ class LanguageConfig:
     # Node types whose children should be checked for nested chunks
     container_types: set[str]
 
+    # NEW: Node types relevant to relationship extraction
+    call_node_type: str  # The AST node type for function calls
+    import_node_type: str  # The AST node type for imports/includes
+    inherit_node_type: str  # The AST node type for inheritance/base classes
+
 
 def _build_parsers() -> dict[Language, LanguageConfig]:
     """Build parser configurations for all supported languages."""
@@ -37,6 +42,9 @@ def _build_parsers() -> dict[Language, LanguageConfig]:
                 "type_definition": "class",    # typedef
             },
             container_types={"translation_unit"},
+            call_node_type="call_expression",
+            import_node_type="preproc_include",
+            inherit_node_type="",  # C has no class inheritance
         ),
         Language.PYTHON: LanguageConfig(
             language=Language.PYTHON,
@@ -46,6 +54,9 @@ def _build_parsers() -> dict[Language, LanguageConfig]:
                 "class_definition": "class",
             },
             container_types={"module", "class_definition"},
+            call_node_type="call",
+            import_node_type="import_statement",
+            inherit_node_type="class_definition",
         ),
     }
 

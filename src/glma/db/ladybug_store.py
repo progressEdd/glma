@@ -5,7 +5,7 @@ from typing import Optional
 
 from real_ladybug import Database, Connection
 
-from glma.models import Chunk, FileRecord
+from glma.models import Chunk, FileRecord, Relationship
 
 
 class LadybugStore:
@@ -42,6 +42,10 @@ class LadybugStore:
     CREATE REL TABLE IF NOT EXISTS CONTAINS (FROM File TO Chunk)
     """
 
+    SCHEMA_RELATES_TO = """
+    CREATE REL TABLE IF NOT EXISTS RELATES_TO (FROM Chunk TO Chunk, rel_type STRING, confidence STRING, source_line INT64, target_name STRING)
+    """
+
     def __init__(self, db_path: Path):
         """Initialize store, creating/opening the database and ensuring schema exists.
 
@@ -58,6 +62,7 @@ class LadybugStore:
         self.conn.execute(self.SCHEMA_CHUNKS)
         self.conn.execute(self.SCHEMA_FILES)
         self.conn.execute(self.SCHEMA_CONTAINS)
+        self.conn.execute(self.SCHEMA_RELATES_TO)
 
     def upsert_file(self, record: FileRecord) -> None:
         """Insert or update a file record. Uses detach delete+re-insert pattern."""
@@ -147,6 +152,87 @@ class LadybugStore:
             "MATCH (f:File {path: $path}) DELETE f",
             {"path": file_path},
         )
+
+    def delete_relationships(self, file_path: str) -> None:
+        """Delete all outgoing relationships from a file's chunks."""
+        self.conn.execute(
+            "MATCH (c:Chunk {file_path: $fp})-[r:RELATES_TO]->() DELETE r",
+            {"fp": file_path},
+        )
+
+    def upsert_relationships(self, file_path: str, relationships: list[Relationship]) -> None:
+        """Replace all outgoing relationships for a file's chunks."""
+        self.delete_relationships(file_path)
+        for rel in relationships:
+            if rel.target_id:
+                self.conn.execute(
+                    """MATCH (src:Chunk {id: $sid}), (tgt:Chunk {id: $tid})
+                    CREATE (src)-[:RELATES_TO {rel_type: $rt, confidence: $conf, source_line: $sl, target_name: $tn}]->(tgt)""",
+                    {
+                        "sid": rel.source_id,
+                        "tid": rel.target_id,
+                        "rt": rel.rel_type.value,
+                        "conf": rel.confidence.value,
+                        "sl": rel.source_line,
+                        "tn": rel.target_name,
+                    },
+                )
+            else:
+                # Unresolved: store with source pointing to itself, target_name captures what was called
+                self.conn.execute(
+                    """MATCH (src:Chunk {id: $sid})
+                    CREATE (src)-[:RELATES_TO {rel_type: $rt, confidence: $conf, source_line: $sl, target_name: $tn}]->(src)""",
+                    {
+                        "sid": rel.source_id,
+                        "rt": rel.rel_type.value,
+                        "conf": rel.confidence.value,
+                        "sl": rel.source_line,
+                        "tn": rel.target_name,
+                    },
+                )
+
+    def get_outgoing_relationships(self, chunk_id: str) -> list[dict]:
+        """Get all outgoing relationships from a chunk."""
+        result = self.conn.execute(
+            "MATCH (c:Chunk {id: $cid})-[r:RELATES_TO]->(t:Chunk) RETURN r.rel_type, r.confidence, r.source_line, r.target_name, t.id, t.name",
+            {"cid": chunk_id},
+        )
+        rows = []
+        for row in result:
+            rows.append({
+                "rel_type": row[0], "confidence": row[1], "source_line": row[2],
+                "target_name": row[3], "target_id": row[4], "target_chunk_name": row[5],
+            })
+        return rows
+
+    def get_incoming_relationships(self, chunk_id: str) -> list[dict]:
+        """Get all incoming relationships to a chunk."""
+        result = self.conn.execute(
+            "MATCH (s:Chunk)-[r:RELATES_TO]->(c:Chunk {id: $cid}) RETURN r.rel_type, r.confidence, r.source_line, r.target_name, s.id, s.name",
+            {"cid": chunk_id},
+        )
+        rows = []
+        for row in result:
+            rows.append({
+                "rel_type": row[0], "confidence": row[1], "source_line": row[2],
+                "target_name": row[3], "source_id": row[4], "source_chunk_name": row[5],
+            })
+        return rows
+
+    def get_file_relationships(self, file_path: str) -> list[dict]:
+        """Get all outgoing relationships from all chunks in a file."""
+        result = self.conn.execute(
+            "MATCH (c:Chunk {file_path: $fp})-[r:RELATES_TO]->(t:Chunk) RETURN c.id, c.name, r.rel_type, r.confidence, r.source_line, r.target_name, t.id, t.name",
+            {"fp": file_path},
+        )
+        rows = []
+        for row in result:
+            rows.append({
+                "source_id": row[0], "source_name": row[1],
+                "rel_type": row[2], "confidence": row[3], "source_line": row[4],
+                "target_name": row[5], "target_id": row[6], "target_name_resolved": row[7],
+            })
+        return rows
 
     def close(self) -> None:
         """Close the database connection."""
