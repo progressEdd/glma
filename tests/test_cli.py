@@ -47,3 +47,17 @@ class TestIndexCommand:
         # Typer exits with code 2 for no_args_is_help
         assert result.returncode == 2 or result.returncode == 0
         assert "index" in result.stdout.lower()
+
+
+class TestExportFlags:
+    """Test export command flags."""
+
+    def test_include_code_flag_in_help(self):
+        result = subprocess.run(
+            [sys.executable, "-m", "glma", "export", "--help"],
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode == 0
+        assert "--include-code" in result.stdout
+        assert "--no-code" not in result.stdout

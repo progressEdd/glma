@@ -71,6 +71,12 @@ class TestRuleSummary:
         assert "15 function(s)" in summary
         assert "more" in summary  # Truncation indicator
 
+    def test_shared_module_identical(self):
+        """Verify shared module produces same result as old location."""
+        from glma.summaries import generate_rule_summary as shared_summary
+        chunks = [_make_chunk("hello")]
+        assert generate_rule_summary("test.py", chunks, []) == shared_summary("test.py", chunks, [])
+
 
 class TestFormatExportFile:
     """Tests for _format_export_file."""
@@ -99,9 +105,9 @@ class TestFormatExportFile:
         assert "## Summary" in md
         assert "hello" in md
 
-    def test_code_included_by_default(self):
+    def test_code_included_when_requested(self):
         chunks = [_make_chunk("my_func")]
-        config = ExportConfig()
+        config = ExportConfig(include_code=True)
         md = _format_export_file("src/test.py", None, chunks, [], config)
         assert "```python" in md
         assert "def my_func(): pass" in md

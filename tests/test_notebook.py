@@ -75,3 +75,45 @@ def test_cross_cell_reference(simple_notebook):
 
     # Cell 1 annotation should show x referenced with defined cell 0
     assert "defined cell 0" in result or "(defined cell 0)" in result
+
+
+@pytest.fixture
+def comprehension_notebook(tmp_path):
+    """Create a notebook with list/dict/set comprehensions."""
+    nb = nbformat.v4.new_notebook()
+    nb.cells = [
+        nbformat.v4.new_code_cell("result = [x * 2 for x in range(10) if x > 3]"),
+        nbformat.v4.new_code_cell("mapping = {k: v for k, v in zip(keys, values)}"),
+        nbformat.v4.new_code_cell("unique = {x for x in items if x > 0}"),
+        nbformat.v4.new_code_cell("""matrix = [
+    [i * j for j in range(5)]
+    for i in range(5)
+]"""),
+    ]
+    path = tmp_path / "comprehension.ipynb"
+    nbformat.write(nb, str(path))
+    return path
+
+
+def test_comprehension_source_preserved(comprehension_notebook):
+    """List/dict/set comprehensions appear in full in cell source output."""
+    result = compact_notebook(comprehension_notebook)
+    # List comprehension — full expression must appear
+    assert "[x * 2 for x in range(10) if x > 3]" in result
+    # Dict comprehension — full expression must appear
+    assert "{k: v for k, v in zip(keys, values)}" in result
+    # Set comprehension — full expression must appear
+    assert "{x for x in items if x > 0}" in result
+    # Multi-line comprehension — both lines must appear
+    assert "[i * j for j in range(5)]" in result
+    assert "for i in range(5)" in result
+
+
+def test_comprehension_variable_tracking(comprehension_notebook):
+    """Comprehension statements are tracked in variable analysis."""
+    result = compact_notebook(comprehension_notebook)
+    # The variables assigned by comprehensions should appear in variable flow
+    assert "result" in result
+    assert "mapping" in result
+    assert "unique" in result
+    assert "matrix" in result

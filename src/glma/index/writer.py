@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Optional
 
 from glma.models import Chunk, ChunkType
+from glma.summaries import generate_rule_summary
 
 
 def _chunk_display_type(chunk: Chunk) -> str:
@@ -270,8 +271,9 @@ def format_file_markdown(
     lines.append(f"# {file_path}")
     lines.append("")
 
-    # File summary (placeholder for Phase 3 LLM generation)
-    lines.append("*(File summary not yet generated — available after Phase 3.)*")
+    # File summary from rule-based analysis
+    summary = generate_rule_summary(file_path, chunks, relationships or [])
+    lines.append(summary)
     lines.append("")
 
     # Key Exports table

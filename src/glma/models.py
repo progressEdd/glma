@@ -100,7 +100,7 @@ class ExportConfig(BaseModel):
         description="Output path: directory, .tar.gz/.tgz archive, or '-' for stdout",
     )
     include_code: bool = Field(
-        default=True,
+        default=False,
         description="Include full source code in exported chunks",
     )
     ai_summaries: bool = Field(

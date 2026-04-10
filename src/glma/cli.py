@@ -283,10 +283,10 @@ def export(
         "--ai-url",
         help="Local model API URL (default: http://localhost:1234/v1).",
     ),
-    no_code: bool = typer.Option(
+    include_code: bool = typer.Option(
         False,
-        "--no-code",
-        help="Omit full source code from export (signatures only).",
+        "--include-code",
+        help="Include full source code in export (default: signatures only).",
     ),
     config_file: Optional[Path] = typer.Option(
         None,
@@ -313,8 +313,8 @@ def export(
         export_overrides["ai_summaries"] = True
     if ai_url:
         export_overrides["ai_base_url"] = ai_url
-    if no_code:
-        export_overrides["include_code"] = False
+    if include_code:
+        export_overrides["include_code"] = True
 
     export_config = load_export_config(repo_path, export_overrides)
 

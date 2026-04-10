@@ -88,6 +88,13 @@ class TestFormatFileMarkdown:
         # Docstrings should appear above code blocks
         assert "standalone function" in md.lower() or "A standalone function" in md
 
+    def test_file_summary_not_placeholder(self, py_chunks):
+        """Writer output shows actual summary, not Phase 3 placeholder."""
+        md = format_file_markdown("sample.py", py_chunks)
+        assert "*(File summary not yet generated — available after Phase 3.)*" not in md
+        # Should contain some actual summary content
+        assert "function" in md or "class" in md or "chunk" in md
+
 
 class TestWriteMarkdown:
     """Test writing markdown to disk."""
