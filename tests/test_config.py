@@ -75,3 +75,45 @@ class TestInvalidConfig:
         config_file.write_text('[index]\nlanguages = ["rust"]\n')
         with pytest.raises(Exception):
             load_config(tmp_path)
+
+
+class TestSummarizeConfig:
+    """Test load_summarize_config()."""
+
+    def test_defaults(self, tmp_path):
+        from glma.config import load_summarize_config
+        cfg = load_summarize_config(tmp_path)
+        assert cfg.enabled is False
+        assert cfg.provider.value == "local"
+        assert cfg.model == "default"
+        assert cfg.base_url == "http://localhost:1234/v1"
+
+    def test_load_from_file(self, tmp_path):
+        from glma.config import load_summarize_config
+        config_file = tmp_path / ".glma.toml"
+        config_file.write_text(
+            '[summarize]\nenabled = true\nprovider = "local"\nmodel = "llama3"\nbase_url = "http://ollama:11434/v1"\n'
+        )
+        cfg = load_summarize_config(tmp_path)
+        assert cfg.enabled is True
+        assert cfg.model == "llama3"
+        assert cfg.base_url == "http://ollama:11434/v1"
+
+    def test_cli_overrides_file(self, tmp_path):
+        from glma.config import load_summarize_config
+        config_file = tmp_path / ".glma.toml"
+        config_file.write_text('[summarize]\nmodel = "from-file"\n')
+        cfg = load_summarize_config(tmp_path, {"model": "from-cli"})
+        assert cfg.model == "from-cli"
+
+    def test_none_override_ignored(self, tmp_path):
+        from glma.config import load_summarize_config
+        config_file = tmp_path / ".glma.toml"
+        config_file.write_text('[summarize]\nmodel = "from-file"\n')
+        cfg = load_summarize_config(tmp_path, {"model": None})
+        assert cfg.model == "from-file"
+
+    def test_cli_enabled_flag(self, tmp_path):
+        from glma.config import load_summarize_config
+        cfg = load_summarize_config(tmp_path, {"enabled": True})
+        assert cfg.enabled is True

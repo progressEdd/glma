@@ -93,6 +93,32 @@ class WatchConfig(BaseModel):
     )
 
 
+class SummarizeProvider(str, Enum):
+    """Supported summarization provider backends."""
+    LOCAL = "local"
+    PI = "pi"
+
+
+class SummarizeConfig(BaseModel):
+    """Configuration for AI summarization, loaded from .glma.toml [summarize] + CLI flags."""
+    enabled: bool = Field(
+        default=False,
+        description="Enable AI summarization during indexing",
+    )
+    provider: SummarizeProvider = Field(
+        default=SummarizeProvider.LOCAL,
+        description="Summarization provider: 'local' (OpenAI-compatible) or 'pi'",
+    )
+    model: str = Field(
+        default="default",
+        description="Model name for summarization",
+    )
+    base_url: str = Field(
+        default="http://localhost:1234/v1",
+        description="OpenAI-compatible API base URL (used by local provider)",
+    )
+
+
 class ExportConfig(BaseModel):
     """Configuration for air-gapped export."""
     output_path: Optional[str] = Field(
