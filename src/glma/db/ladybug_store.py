@@ -90,7 +90,20 @@ class LadybugStore:
         )
 
     def upsert_chunks(self, file_path: str, chunks: list[Chunk]) -> None:
-        """Delete existing chunks for a file and insert new ones."""
+        """Delete existing chunks for a file and insert new ones.
+
+        Preserves existing summaries for chunks whose content_hash hasn't changed.
+        This ensures AI-generated summaries survive re-indexing when the code is unchanged.
+        """
+        # Preserve existing summaries keyed by content_hash
+        existing = self.get_chunks_for_file(file_path)
+        summary_map = {c.content_hash: c.summary for c in existing if c.summary}
+
+        # Apply preserved summaries to incoming chunks
+        for chunk in chunks:
+            if not chunk.summary and chunk.content_hash in summary_map:
+                chunk.summary = summary_map[chunk.content_hash]
+
         # Remove old chunks and their CONTAINS edges
         self.conn.execute(
             "MATCH (c:Chunk {file_path: $fp}) DETACH DELETE c",
@@ -151,6 +164,20 @@ class LadybugStore:
         self.conn.execute(
             "MATCH (f:File {path: $path}) DELETE f",
             {"path": file_path},
+        )
+
+    def update_chunk_summary(self, chunk_id: str, summary: str) -> None:
+        """Update the summary field of a single chunk.
+
+        Does not delete or recreate the chunk — targeted field update only.
+
+        Args:
+            chunk_id: Unique chunk identifier (format: path::type::name::line).
+            summary: New summary text to store.
+        """
+        self.conn.execute(
+            "MATCH (c:Chunk {id: $cid}) SET c.summary = $summary",
+            {"cid": chunk_id, "summary": summary},
         )
 
     def delete_relationships(self, file_path: str) -> None:
