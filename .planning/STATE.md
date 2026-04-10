@@ -89,6 +89,8 @@ Recent decisions affecting current work:
 ### Blockers/Concerns
 
 - None — all 4 phases completed successfully.
+- Milestone audit completed 2026-04-10: status `tech_debt`, 42/42 requirements satisfied, 211 tests passing
+- 6 pending todos captured for v1.1 work
 
 ## Session Continuity
 
