@@ -1,11 +1,11 @@
 ---
 gsd_state_version: 1.0
 milestone: v1.1
-milestone_name: milestone
+milestone_name: Polish & Complete
 status: planning
-stopped_at: "v1.0 complete, ready for v1.1 planning"
+stopped_at: "defining requirements"
 last_updated: "2026-04-10T00:00:00Z"
-last_activity: 2026-04-10 - v1.0 milestone completed, 6 pending todos for v1.1
+last_activity: 2026-04-10 - Milestone v1.1 started
 progress:
   total_phases: 0
   completed_phases: 0
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-10)
 
 **Core value:** Agents can call a single command and get exactly the code context they need to implement features — no grepping, no raw file parsing, no guesswork.
-**Current focus:** v1.0 shipped. v1.1 planning pending (6 todos captured).
+**Current focus:** v1.1 Polish & Complete
 
 ## Current Position
 
-Phase: N/A (v1.0 complete)
-Plan: N/A
-Status: Ready for v1.1 planning
-Last activity: 2026-04-10 - v1.0 milestone completed
+Phase: Not started (defining requirements)
+Plan: -
+Status: Defining requirements
+Last activity: 2026-04-10 - Milestone v1.1 started
 
 Progress: [ ] 0%
 
@@ -72,12 +72,7 @@ Key decisions from v1.0 carried forward:
 
 ### Pending Todos
 
-1. **Default markdown export to summaries only** (api) — `2026-04-10-default-markdown-export-to-summaries-only.md`
-2. **Fix notebook cell source truncation in compaction** (api) — `2026-04-10-fix-notebook-cell-source-truncation.md`
-3. **Per-chunk AI summaries from local LLM** (api) — `2026-04-10-per-chunk-ai-summaries-from-local-llm.md`
-4. **Pi/agent integration for code summarization** (api) — `2026-04-10-pi-agent-integration-for-summarization.md`
-5. **Replace stale Phase 3 placeholder in writer markdown** (api) — `2026-04-10-replace-stale-phase-3-placeholder-in-writer.md`
-6. **Generate codebase architecture summary file** (api) — `2026-04-10-generate-codebase-architecture-summary-file.md`
+All 6 v1.0 pending todos incorporated into v1.1 requirements.
 
 ### Blockers/Concerns
 
@@ -86,5 +81,5 @@ Key decisions from v1.0 carried forward:
 ## Session Continuity
 
 Last session: 2026-04-10
-Stopped at: v1.0 milestone completed
-Resume file: N/A - run /gsd-new-milestone to start v1.1
+Stopped at: Defining requirements for v1.1
+Resume file: N/A - run /gsd-plan-phase to start building

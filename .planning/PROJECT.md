@@ -37,15 +37,35 @@ Agents can call a single command and get exactly the code context they need to i
 - ✓ Optional AI summaries via OpenAI-compatible local model (Phase 4)
 - ✓ 211 tests, all passing (Phase 1-4)
 
-### Active (v1.1+)
+## Current Milestone: v1.1 Polish & Complete
 
-- [ ] Per-chunk AI summaries (chunk.summary field exists but never populated)
-- [ ] Pi/agent integration for summarization (no separate LLM server needed)
-- [ ] Architecture summary file (ARCHITECTURE.md in export)
-- [ ] Local model provider presets (--ai-provider ollama/llamacpp/etc.)
-- [ ] Notebook cell source truncation fix (list comprehensions stripped)
+**Goal:** Close all v1.0 gaps — fix bugs, complete features, and ship per-chunk AI summarization persisted to the database.
+
+**Target features:**
+- Fix markdown export to default summaries-only (`include_code` → `False`)
+- Fix notebook cell source truncation (list comprehensions)
+- Remove stale Phase 3 placeholder from writer output
+- Per-chunk AI summaries persisted to DB, with pluggable model providers (local Ollama/LM Studio, pi agent, etc.)
+- Generate ARCHITECTURE.md summary file in exports
+
+**Key context:**
+- One summarization pipeline, multiple providers. Local OpenAI-compatible and pi are just different backends.
+- Single model for everything — chunk summaries, future query rewriting, future embedding. One config.
+- Foundational for future semantic search. Ladybug already has native vector indices.
+- No new languages, no new architecture — purely closing v1.0 gaps.
+
+### Active (v1.1)
+
 - [ ] Export defaults to summaries-only (include_code should default False)
+- [ ] Notebook cell source truncation fix (list comprehensions stripped)
 - [ ] Stale Phase 3 placeholder removal from writer.py
+- [ ] Per-chunk AI summaries (generate, persist to DB, flow into export/query/markdown)
+- [ ] Pluggable model providers for summarization (local OpenAI-compatible + pi agent)
+- [ ] Architecture summary file (ARCHITECTURE.md in export)
+
+### Deferred
+
+- [ ] Local model provider presets (--ai-provider ollama/llamacpp/etc.)
 - [ ] Semantic search layer on top of graph relationships
 - [ ] Extended language support (C++, TypeScript, Rust)
 - [ ] MCP server interface for direct agent integration
@@ -112,4 +132,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-**Last updated: 2026-04-10 — v1.0 milestone complete, 6 pending todos for v1.1*
+*Last updated: 2026-04-10 after v1.1 milestone definition*
