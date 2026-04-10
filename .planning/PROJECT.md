@@ -10,36 +10,45 @@ Agents can call a single command and get exactly the code context they need to i
 
 ## Requirements
 
-### Validated
+### Validated (v1.0)
 
-<!-- Shipped and confirmed valuable from hackathon work + Phase 1. -->
+- ✓ Tree-sitter chunking of C and Python source files (Phase 1)
+- ✓ Loading parsed chunks into Ladybug graph database with Chunk/File/CONTAINS schema (Phase 1)
+- ✓ File extension detection and classification (Phase 1)
+- ✓ CLI entry point with `glma index`, `glma query`, `glma watch`, `glma export` commands (Phases 1-4)
+- ✓ Configuration from `.glma.toml` with CLI overrides (Phase 1)
+- ✓ Directory walking with exclusion filtering (.git, venvs, node_modules, hidden files) (Phase 1)
+- ✓ Comment attachment via AST post-processing (docstrings + proximity heuristic) (Phase 1)
+- ✓ Per-file markdown output in layered summary format (Phase 1)
+- ✓ Content hashing for incremental re-indexing (BLAKE2b) (Phase 1)
+- ✓ Progress display during indexing (Rich progress bar) (Phase 1)
+- ✓ Relationship extraction: calls, imports, inheritance, includes (Phase 2)
+- ✓ Import alias resolution and self.method() resolution (Phase 2)
+- ✓ Cross-file relationship resolution with 3-pass pipeline (Phase 2)
+- ✓ Confidence tagging (DIRECT vs INFERRED) for all relationships (Phase 2)
+- ✓ CLI query tool with layered markdown: summary → signatures → full code (Phase 3)
+- ✓ Jupyter notebook compaction with per-statement variable tracking (Phase 3)
+- ✓ Cross-cell variable flow table (Phase 3)
+- ✓ BFS relationship traversal with configurable depth (Phase 3)
+- ✓ JSON output format for programmatic consumption (Phase 3)
+- ✓ File watching with watchfiles, incremental re-indexing (Phase 4)
+- ✓ Air-gapped markdown export (directory, tar.gz, stdout) (Phase 4)
+- ✓ Rule-based file summaries (deterministic, no LLM) (Phase 4)
+- ✓ Optional AI summaries via OpenAI-compatible local model (Phase 4)
+- ✓ 211 tests, all passing (Phase 1-4)
 
-- ✓ Tree-sitter chunking of C source files - existing (hackathon: `develop.ipynb`) + Phase 1 (`glma index`)
-- ✓ Tree-sitter chunking of Python source files - existing (grammar installed, tested) + Phase 1
-- ✓ Loading parsed chunks into a graph database - Phase 1 (Ladybug store with Chunk/File/CONTAINS schema)
-- ✓ File extension detection and classification - Phase 1 (detector.py)
-- ✓ CLI entry point with `glma index` command - Phase 1 (Typer CLI)
-- ✓ Configuration from `.glma.toml` with CLI overrides - Phase 1 (config.py)
-- ✓ Directory walking with exclusion filtering - Phase 1 (walker.py)
-- ✓ Comment attachment via AST post-processing - Phase 1 (comments.py)
-- ✓ Per-file markdown output in layered summary format - Phase 1 (writer.py)
-- ✓ Content hashing for incremental re-indexing - Phase 1 (pipeline.py, BLAKE2b)
-- ✓ Progress display during indexing - Phase 1 (Rich progress bar)
-- ✓ Jupyter notebook-based analysis pipeline - existing (88-cell notebook)
+### Active (v1.1+)
 
-### Active
-
-<!-- Current scope. Building toward these. -->
-
-- [ ] Generalized indexer: point at any repo, parse all supported languages, store in graph DB — ✓ DONE in Phase 1
-- [ ] Relationship extraction between code chunks (function calls, imports, class hierarchies, variable references) — ✓ DONE in Phase 2
+- [ ] Per-chunk AI summaries (chunk.summary field exists but never populated)
+- [ ] Pi/agent integration for summarization (no separate LLM server needed)
+- [ ] Architecture summary file (ARCHITECTURE.md in export)
+- [ ] Local model provider presets (--ai-provider ollama/llamacpp/etc.)
+- [ ] Notebook cell source truncation fix (list comprehensions stripped)
+- [ ] Export defaults to summaries-only (include_code should default False)
+- [ ] Stale Phase 3 placeholder removal from writer.py
 - [ ] Semantic search layer on top of graph relationships
-- [ ] CLI query tool: agents call `glma query <filepath>` and get compacted relevant chunks as markdown — ✓ DONE in Phase 3
-- [ ] Jupyter notebook compaction: flatten `.ipynb` into readable markdown (cell index, code, variables, references) — ✓ DONE in Phase 3
-- [ ] Markdown as first-class output: human-browsable, agent-readable repo documentation — ✓ DONE in Phase 1
-- [ ] File watcher: detect codebase changes, incrementally update DB and markdown — ✓ DONE in Phase 4
-- [ ] Air-gapped mode: markdown IS the database — shell-only agents can work from it with no Python/JS runtime — ✓ DONE in Phase 4
-- [ ] Extensible language support (starting with C and Python, designed for any tree-sitter grammar) — ✓ Foundation in Phase 1
+- [ ] Extended language support (C++, TypeScript, Rust)
+- [ ] MCP server interface for direct agent integration
 
 ### Out of Scope
 
@@ -103,4 +112,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-09 after Phase 4 completion (all phases done)*
+**Last updated: 2026-04-10 — v1.0 milestone complete, 6 pending todos for v1.1*

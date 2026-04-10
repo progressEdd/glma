@@ -1,42 +1,49 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.0
+milestone: v1.1
 milestone_name: milestone
-status: completed
-stopped_at: Phase 4 complete (all phases done, milestone complete)
-last_updated: "2026-04-09T23:04:17.435Z"
-last_activity: 2026-04-09 - All phases complete
+status: planning
+stopped_at: "v1.0 complete, ready for v1.1 planning"
+last_updated: "2026-04-10T00:00:00Z"
+last_activity: 2026-04-10 - v1.0 milestone completed, 6 pending todos for v1.1
 progress:
-  total_phases: 4
-  completed_phases: 4
-  total_plans: 12
-  completed_plans: 12
-  percent: 100
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-04-09)
+See: .planning/PROJECT.md (updated 2026-04-10)
 
 **Core value:** Agents can call a single command and get exactly the code context they need to implement features — no grepping, no raw file parsing, no guesswork.
-**Current focus:** All phases complete - v1.0 milestone done
+**Current focus:** v1.0 shipped. v1.1 planning pending (6 todos captured).
 
 ## Current Position
 
-Phase: 04 of 4 (file watching air gapped export)
-Plan: 2 of 2
-Status: Milestone complete
-Last activity: 2026-04-09 - All phases complete
+Phase: N/A (v1.0 complete)
+Plan: N/A
+Status: Ready for v1.1 planning
+Last activity: 2026-04-10 - v1.0 milestone completed
 
-Progress: [██████████] 100%
+Progress: [ ] 0%
+
+## v1.0 Summary
+
+**Shipped:** 4 phases, 12 plans, 211 tests, 42/42 requirements
+**Duration:** ~3.5 hours
+**Archive:** .planning/milestones/v1.0-ROADMAP.md, .planning/milestones/v1.0-REQUIREMENTS.md
+**Tag:** v1.0
 
 ## Performance Metrics
 
-**Velocity:**
+**Velocity (v1.0):**
 
-- Total plans completed: 14
+- Total plans completed: 12
 - Average duration: ~15 minutes per plan
 - Total execution time: ~3.5 hours
 
@@ -49,33 +56,19 @@ Progress: [██████████] 100%
 | 3     | 3     | ~30min | ~10min   |
 | 4     | 2     | ~20min | ~10min   |
 
-**Recent Trend:**
-
-- Last 9 plans: 01-04, 02-01, 02-02, 02-03, 03-01, 03-02, 03-03, 04-01, 04-02
-- Trend: All completed successfully, accelerating
-
 ## Accumulated Context
 
 ### Decisions
 
 Decisions are logged in PROJECT.md Key Decisions table.
-Recent decisions affecting current work:
+Key decisions from v1.0 carried forward:
 
-- [Phase 1]: Ladybug (real_ladybug) import differs from PyPI name — `from real_ladybug import Database, Connection`
-- [Phase 1]: Ladybug DB expects file path, not directory — `Database('/path/to/file.lbug')`
-- [Phase 1]: Markdown filenames include source extension to avoid collisions (sample.c.md, sample.py.md)
-- [Phase 1]: AST walker uses broad recursion (all children) to reach Python methods inside block nodes
-- [Phase 1]: upsert_file must delete chunks first (DETACH DELETE) before deleting file node
-- [Phase 2]: Unresolved relationship targets stored as self-referential edges (source→source) with target_name property
-- [Phase 2]: 3-pass pipeline architecture: chunks → relationships → cross-file markdown rewrite
-- [Phase 2]: Import map uses first component of dotted module path as local_name for bare imports
-- [Phase 3]: Query output is generated fresh from DB queries, not by slicing existing per-file markdown
-- [Phase 3]: Per-statement variable tracking (not per-cell) for better agent debugging
-- [Phase 3]: Notebook queries bypass LadybugStore — compacted directly from .ipynb files
-- [Phase 4]: watchfiles for async file watching (awatch batches events at OS level)
-- [Phase 4]: Same-basename heuristic for rename detection in batch window
-- [Phase 4]: Rule-based summaries by default for export (deterministic, no LLM dependency)
-- [Phase 4]: Three export output modes: directory, tar.gz archive, stdout pipe
+- Ladybug (real_ladybug) for graph storage
+- Tree-sitter for C + Python parsing
+- 3-pass pipeline: chunks → relationships → cross-file
+- Markdown as first-class output (agent-readable, air-gapped compatible)
+- Rule-based summaries by default, AI optional
+- Three export modes: directory, tar.gz, stdout
 
 ### Pending Todos
 
@@ -88,12 +81,10 @@ Recent decisions affecting current work:
 
 ### Blockers/Concerns
 
-- None — all 4 phases completed successfully.
-- Milestone audit completed 2026-04-10: status `tech_debt`, 42/42 requirements satisfied, 211 tests passing
-- 6 pending todos captured for v1.1 work
+- None
 
 ## Session Continuity
 
-Last session: 2026-04-09
-Stopped at: Phase 4 complete (all phases done, milestone complete)
-Resume file: N/A - milestone complete
+Last session: 2026-04-10
+Stopped at: v1.0 milestone completed
+Resume file: N/A - run /gsd-new-milestone to start v1.1
