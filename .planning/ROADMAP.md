@@ -1,99 +1,77 @@
-# Roadmap: glma
+# Roadmap: glma v1.1 — Polish & Complete
 
 ## Overview
 
-Build a CLI tool that indexes codebases into a queryable graph database with companion markdown output. AI agents query it to get compacted, relevant code context instead of grepping raw files. Starts with tree-sitter parsing for C and Python, extracts structural relationships (calls, imports, inheritance), and outputs markdown that works even in air-gapped environments.
+Close all v1.0 gaps — fix known bugs, complete unfinished features, and ship per-chunk AI summarization persisted to the database. Three trivial bug fixes, a new summarization pipeline with pluggable providers, and ARCHITECTURE.md generation for exports.
 
 ## Phases
 
 **Phase Numbering:**
-- Integer phases (1, 2, 3): Planned milestone work
-- Decimal phases (2.1, 2.2): Urgent insertions (marked with INSERTED)
+- Continues from v1.0 (Phases 1-4)
+- v1.1 starts at Phase 5
 
-Decimal phases appear between their surrounding integers in numeric order.
-
-- [x] **Phase 1: Core Indexing Pipeline** - Parse repos with tree-sitter, extract chunks, store in LanceDB + markdown
-- [x] **Phase 2: Relationship Extraction** - Extract calls, imports, and inheritance relationships from ASTs
-- [x] **Phase 3: Query Tool & Notebook Compaction** - CLI query interface, Jupyter compaction, layered markdown output
-- [x] **Phase 4: File Watching & Air-Gapped Export** - Live sync, incremental updates, static markdown export
+- [ ] **Phase 5: Bug Fixes** - Fix export default, notebook truncation, stale placeholder
+- [ ] **Phase 6: Summarization Infrastructure** - Provider protocol, DB update method, summarization pipeline
+- [ ] **Phase 7: CLI Integration & Providers** - Wire up CLI flags, implement OpenAI-compatible and pi providers
+- [ ] **Phase 8: ARCHITECTURE.md & Export Polish** - Generate codebase architecture summary, verify all outputs flow summaries
 
 ## Phase Details
 
-### Phase 1: Core Indexing Pipeline
-**Goal**: User can point `glma index` at any repo and get a fully parsed index of all C and Python files, stored in LanceDB with companion markdown files
-**Depends on**: Nothing (first phase)
-**Requirements**: IDXC-01, IDXC-02, IDXC-03, IDXC-04, IDXC-05, IDXC-06, IDXC-07, IDXC-08, IDXC-09, IDXC-10, STOR-01, STOR-03, STOR-05, CLIF-01
+### Phase 5: Bug Fixes
+**Goal**: All three v1.0 bugs fixed — export defaults to summaries-only, notebook cells preserve comprehensions, writer output no longer shows stale placeholder
+**Depends on**: Phase 4 (v1.0 complete)
+**Requirements**: FIX-01, FIX-02, FIX-03
 **Success Criteria** (what must be TRUE):
-  1. Running `glma index /path/to/repo` creates `.glma-index/` with a LanceDB database and markdown files for every C and Python file found
-  2. Each markdown file contains the extracted chunks (functions, classes, methods) with their associated comments attached
-  3. Re-running `glma index` on the same repo only re-processes files whose content hash has changed
-  4. Indexing shows progress (files processed count, spinner or progress bar) and completes without crashing on repos with 10K+ files
-  5. Binary files, .git directories, venvs, and node_modules are automatically skipped
-**Plans**: TBD
+  1. Running `glma export` without `--no-code` produces markdown with signatures/summaries only (no full source code) — ExportConfig.include_code defaults to False
+  2. Querying a Jupyter notebook containing list/dict/set comprehensions shows the full comprehension expression in the cell source — no truncation
+  3. Running `glma index` produces per-file markdown where the file summary section shows the rule-based summary text, not "*(File summary not yet generated — available after Phase 3.)*"
+  4. All 211 existing tests still pass after changes
 
-Plans:
-- [x] 01-01: Project scaffolding, CLI entry point, Ladybug store
-- [x] 01-02: Language detection, tree-sitter parsing pipeline, chunk extraction
-- [x] 01-03: Comment attachment, markdown output, progress display
-- [x] 01-04: Content hashing, incremental re-indexing, integration testing
-
-### Phase 2: Relationship Extraction
-**Goal**: The index contains structural relationships (function calls, imports, inheritance) that agents can follow to understand how code connects across files
-**Depends on**: Phase 1
-**Requirements**: RELS-01, RELS-02, RELS-03, RELS-04, RELS-05, RELS-06, RELS-07, STOR-02, STOR-04
+### Phase 6: Summarization Infrastructure
+**Goal**: Core summarization pipeline exists — provider protocol, LadybugStore update method, summarize_chunks function — ready for CLI wiring
+**Depends on**: Phase 5 (bug fixes done, clean baseline)
+**Requirements**: SUMM-01, SUMM-02, PROV-01
 **Success Criteria** (what must be TRUE):
-  1. After indexing, querying a function shows what other functions it calls and what functions call it
-  2. Import relationships are resolved (including aliases like `import foo; foo.bar()`) and stored in the database
-  3. Class inheritance is extracted (class A extends class B) and visible in markdown output
-  4. Each relationship is tagged as DIRECT or INFERRED based on analysis confidence
-  5. `self.method()` calls are resolved to the correct class method
-**Plans**: 3 plans across 3 waves
+  1. `SummarizerProvider` protocol exists with `summarize(code: str, context: str) -> str` method
+  2. `LadybugStore.update_chunk_summary(chunk_id, summary)` can update a single chunk's summary without deleting/recreating all chunks for the file
+  3. `summarize_chunks(store, chunks, provider)` processes chunks, calls provider, writes summaries to DB, and returns updated chunks
+  4. Re-indexing a file preserves existing summaries where content_hash hasn't changed (summaries survive upsert_chunks)
+  5. Only chunks with NULL/empty summary are processed — already-summarized chunks are skipped
+  6. Unit tests verify: provider protocol, DB update, incremental skip logic
 
-Plans:
-- [x] 02-01: Relationship data model, LanceDB relationships table, C relationship extraction
-- [x] 02-02: Python relationship extraction, import alias resolution, self.method() resolution
-- [x] 02-03: Confidence tagging, relationship markdown output, cross-file resolution
-
-### Phase 3: Query Tool & Notebook Compaction
-**Goal**: Agents can call `glma query <filepath>` and get back compacted, relevant context as markdown — including Jupyter notebooks flattened into readable form
-**Depends on**: Phase 2
-**Requirements**: QURY-01, QURY-02, QURY-03, QURY-04, QURY-05, JNTP-01, JNTP-02, JNTP-03, JNTP-04, CLIF-02, CLIF-05
+### Phase 7: CLI Integration & Providers
+**Goal**: Users can run `glma index --summarize` to generate per-chunk AI summaries, with configurable providers (local OpenAI-compatible or pi agent)
+**Depends on**: Phase 6 (pipeline infrastructure in place)
+**Requirements**: SUMM-03, PROV-02, PROV-03, PROV-04
 **Success Criteria** (what must be TRUE):
-  1. `glma query src/auth/login.py` outputs markdown with file summary, function signatures with docstrings, incoming dependencies, and outgoing dependencies
-  2. Query output uses layered format by default (summary → signatures → details) and includes full code with `--verbose` flag
-  3. Jupyter notebooks (.ipynb) are compacted into markdown showing cell index, code, variables defined, and variables referenced per cell
-  4. Cell outputs are stripped by default; variable definitions are tracked across cells (cell 1 defines `x`, cell 5 uses `x`)
-  5. Query results show index metadata (last indexed timestamp, number of chunks in file)
-**Plans**: TBD
+  1. `glma index --summarize` runs the summarization pass after indexing, populating chunk.summary in the DB
+  2. `--summarize-provider local` uses OpenAI-compatible API (Ollama, LM Studio, llama.cpp) — works with any base_url
+  3. `--summarize-provider pi` uses pi's API for summarization
+  4. `.glma.toml` supports `[summarize]` section with `enabled`, `provider`, `model`, `base_url` fields
+  5. After summarization, `glma export` output includes per-chunk AI summaries in the markdown
+  6. After summarization, `glma query <file>` output includes chunk summaries
+  7. openai remains an optional dependency (`pip install glma[ai]`); non-AI installs still work
+  8. Summaries appear in writer markdown output (per-file .md in .glma-index/)
 
-Plans:
-- [x] 03-01: CLI query command, file lookup, layered markdown formatting
-- [x] 03-02: Jupyter notebook parsing, variable tracking, notebook compaction
-- [x] 03-03: Dependency inclusion in output, verbose mode, index metadata display
-
-### Phase 4: File Watching & Air-Gapped Export
-**Goal**: The index stays in sync as code changes, and the full index can be exported as static markdown for zero-runtime environments
-**Depends on**: Phase 3
-**Requirements**: WTCH-01, WTCH-02, WTCH-03, AIRG-01, AIRG-02, AIRG-03, CLIF-03, CLIF-04
+### Phase 8: ARCHITECTURE.md & Export Polish
+**Goal**: Exports include a codebase-level ARCHITECTURE.md derived from relationship data and summaries, giving agents instant high-level understanding
+**Depends on**: Phase 7 (summaries available in DB)
+**Requirements**: ARCH-01
 **Success Criteria** (what must be TRUE):
-  1. Running `glma watch /path/to/repo` detects file changes (create, modify, delete, rename) and incrementally re-indexes only affected files
-  2. Both LanceDB and markdown files stay in sync after changes — querying returns current data, not stale data
-  3. Running `glma export /path/to/repo` generates a complete markdown export in a specified directory that contains all chunks, relationships, and file summaries
-  4. A shell-only agent (no Python runtime) can `cat` the exported markdown files and have full codebase context sufficient to implement features
-**Plans**: TBD
-
-Plans:
-- [x] 04-01: File watcher with watchfiles, incremental re-indexing, dual output sync
-- [x] 04-02: Air-gapped markdown export, full index serialization, validation
+  1. `glma export` generates ARCHITECTURE.md alongside INDEX.md and RELATIONSHIPS.md in the export output
+  2. ARCHITECTURE.md contains: project structure overview, module dependency graph, entry points, and key interfaces derived from DB data
+  3. ARCHITECTURE.md includes a timestamp header indicating when the index was generated
+  4. Running export on the glma codebase itself produces a useful ARCHITECTURE.md (dogfood test)
+  5. All existing tests pass; new tests cover ARCHITECTURE.md generation
 
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 → 2 → 3 → 4
+Phases execute in numeric order: 5 → 6 → 7 → 8
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Core Indexing Pipeline | 4/4 | Complete | 2026-04-08 |
-| 2. Relationship Extraction | 3/3 | Complete | 2026-04-09 |
-| 3. Query Tool & Notebook Compaction | 3/3 | Complete | 2026-04-09 |
-| 4. File Watching & Air-Gapped Export | 2/2 | Complete | 2026-04-09 |
+| 5. Bug Fixes | 0/? | Pending | - |
+| 6. Summarization Infrastructure | 0/? | Pending | - |
+| 7. CLI Integration & Providers | 0/? | Pending | - |
+| 8. ARCHITECTURE.md & Export Polish | 0/? | Pending | - |

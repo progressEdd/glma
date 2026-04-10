@@ -75,22 +75,22 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 | ----------- | ----- | ------ |
-| FIX-01 | - | Pending |
-| FIX-02 | - | Pending |
-| FIX-03 | - | Pending |
-| SUMM-01 | - | Pending |
-| SUMM-02 | - | Pending |
-| SUMM-03 | - | Pending |
-| PROV-01 | - | Pending |
-| PROV-02 | - | Pending |
-| PROV-03 | - | Pending |
-| PROV-04 | - | Pending |
-| ARCH-01 | - | Pending |
+| FIX-01 | Phase 5 | Pending |
+| FIX-02 | Phase 5 | Pending |
+| FIX-03 | Phase 5 | Pending |
+| SUMM-01 | Phase 6 | Pending |
+| SUMM-02 | Phase 6 | Pending |
+| SUMM-03 | Phase 7 | Pending |
+| PROV-01 | Phase 6 | Pending |
+| PROV-02 | Phase 7 | Pending |
+| PROV-03 | Phase 7 | Pending |
+| PROV-04 | Phase 7 | Pending |
+| ARCH-01 | Phase 8 | Pending |
 
 **Coverage:**
 - v1.1 requirements: 11 total
-- Mapped to phases: 0
-- Unmapped: 11 ⚠️
+- Mapped to phases: 11
+- Unmapped: 0 ✓
 
 ---
 *Requirements defined: 2026-04-10*
