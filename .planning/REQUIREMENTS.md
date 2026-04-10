@@ -17,14 +17,14 @@ Requirements for Polish & Complete milestone. Each maps to roadmap phases.
 
 - [x] **SUMM-01**: Per-chunk AI summaries generated and persisted to Ladybug DB (chunk.summary field) ✓ Phase 6
 - [x] **SUMM-02**: Incremental summarization — only process chunks where summary is NULL/empty ✓ Phase 6
-- [ ] **SUMM-03**: Summaries appear in export markdown, query output, and writer markdown automatically
+- [x] **SUMM-03**: Summaries appear in export markdown, query output, and writer markdown automatically ✓ Phase 7
 
 ### Provider Architecture
 
 - [x] **PROV-01**: SummarizerProvider protocol with summarize(code, context) → str method ✓ Phase 6
-- [ ] **PROV-02**: OpenAI-compatible provider supporting Ollama, LM Studio, llama.cpp server
-- [ ] **PROV-03**: Pi agent provider for summarization via pi's API
-- [ ] **PROV-04**: Summarization configuration in .glma.toml [summarize] section + CLI flags (--summarize, --summarize-provider, --summarize-model)
+- [x] **PROV-02**: OpenAI-compatible provider supporting Ollama, LM Studio, llama.cpp server ✓ Phase 7
+- [x] **PROV-03**: Pi agent provider for summarization via pi's API ✓ Phase 7
+- [x] **PROV-04**: Summarization configuration in .glma.toml [summarize] section + CLI flags (--summarize, --summarize-provider, --summarize-model) ✓ Phase 7
 
 ### Export Enhancement
 
@@ -80,11 +80,11 @@ Which phases cover which requirements. Updated during roadmap creation.
 | FIX-03 | Phase 5 | Pending |
 | SUMM-01 | Phase 6 | Complete |
 | SUMM-02 | Phase 6 | Complete |
-| SUMM-03 | Phase 7 | Pending |
+| SUMM-03 | Phase 7 | Complete |
 | PROV-01 | Phase 6 | Complete |
-| PROV-02 | Phase 7 | Pending |
-| PROV-03 | Phase 7 | Pending |
-| PROV-04 | Phase 7 | Pending |
+| PROV-02 | Phase 7 | Complete |
+| PROV-03 | Phase 7 | Complete |
+| PROV-04 | Phase 7 | Complete |
 | ARCH-01 | Phase 8 | Pending |
 
 **Coverage:**
