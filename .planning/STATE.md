@@ -79,7 +79,8 @@ Recent decisions affecting current work:
 
 ### Pending Todos
 
-None.
+1. **Default markdown export to summaries only** (api) — `2026-04-10-default-markdown-export-to-summaries-only.md`
+2. **Fix notebook cell source truncation in compaction** (api) — `2026-04-10-fix-notebook-cell-source-truncation.md`
 
 ### Blockers/Concerns
 
