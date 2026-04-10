@@ -9,9 +9,9 @@ Requirements for Polish & Complete milestone. Each maps to roadmap phases.
 
 ### Bug Fixes
 
-- [ ] **FIX-01**: Export defaults to summaries-only (ExportConfig.include_code defaults to False)
-- [ ] **FIX-02**: Notebook cell source truncation fixed for list/dict/set comprehensions
-- [ ] **FIX-03**: Stale Phase 3 placeholder in writer.py replaced with actual summary (rule-based or AI)
+- [x] **FIX-01**: Export defaults to summaries-only (ExportConfig.include_code defaults to False) ✓ Phase 5
+- [x] **FIX-02**: Notebook cell source truncation fixed for list/dict/set comprehensions ✓ Phase 5
+- [x] **FIX-03**: Stale Phase 3 placeholder in writer.py replaced with actual summary (rule-based or AI) ✓ Phase 5
 
 ### Summarization Pipeline
 
