@@ -81,6 +81,9 @@ Recent decisions affecting current work:
 
 1. **Default markdown export to summaries only** (api) — `2026-04-10-default-markdown-export-to-summaries-only.md`
 2. **Fix notebook cell source truncation in compaction** (api) — `2026-04-10-fix-notebook-cell-source-truncation.md`
+3. **Per-chunk AI summaries from local LLM** (api) — `2026-04-10-per-chunk-ai-summaries-from-local-llm.md`
+4. **Pi/agent integration for code summarization** (api) — `2026-04-10-pi-agent-integration-for-summarization.md`
+5. **Replace stale Phase 3 placeholder in writer markdown** (api) — `2026-04-10-replace-stale-phase-3-placeholder-in-writer.md`
 
 ### Blockers/Concerns
 
