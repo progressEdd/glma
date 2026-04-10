@@ -84,6 +84,7 @@ Recent decisions affecting current work:
 3. **Per-chunk AI summaries from local LLM** (api) — `2026-04-10-per-chunk-ai-summaries-from-local-llm.md`
 4. **Pi/agent integration for code summarization** (api) — `2026-04-10-pi-agent-integration-for-summarization.md`
 5. **Replace stale Phase 3 placeholder in writer markdown** (api) — `2026-04-10-replace-stale-phase-3-placeholder-in-writer.md`
+6. **Generate codebase architecture summary file** (api) — `2026-04-10-generate-codebase-architecture-summary-file.md`
 
 ### Blockers/Concerns
 
