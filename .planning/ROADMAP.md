@@ -11,7 +11,7 @@ Close all v1.0 gaps — fix known bugs, complete unfinished features, and ship p
 - v1.1 starts at Phase 5
 
 - [x] **Phase 5: Bug Fixes** - Fix export default, notebook truncation, stale placeholder
-- [ ] **Phase 6: Summarization Infrastructure** - Provider protocol, DB update method, summarization pipeline
+- [x] **Phase 6: Summarization Infrastructure** - Provider protocol, DB update method, summarization pipeline
 - [ ] **Phase 7: CLI Integration & Providers** - Wire up CLI flags, implement OpenAI-compatible and pi providers
 - [ ] **Phase 8: ARCHITECTURE.md & Export Polish** - Generate codebase architecture summary, verify all outputs flow summaries
 
@@ -72,6 +72,6 @@ Phases execute in numeric order: 5 → 6 → 7 → 8
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 5. Bug Fixes | 2/2 | Complete | 2026-04-10 |
-| 6. Summarization Infrastructure | 0/? | Pending | - |
+| 6. Summarization Infrastructure | 1/1 | Complete | 2026-04-10 |
 | 7. CLI Integration & Providers | 0/? | Pending | - |
 | 8. ARCHITECTURE.md & Export Polish | 0/? | Pending | - |
