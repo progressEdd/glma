@@ -44,6 +44,21 @@ def index(
     config_file: Optional[Path] = typer.Option(None, "--config", help="Path to .glma.toml config file."),
     languages: Optional[list[str]] = typer.Option(None, "--lang", help="Languages to index (c, python)."),
     output_dir: Optional[str] = typer.Option(None, "--output", "-o", help="Output directory for index."),
+    summarize: bool = typer.Option(
+        False,
+        "--summarize",
+        help="Run AI summarization pass after indexing to generate per-chunk summaries.",
+    ),
+    summarize_provider: Optional[str] = typer.Option(
+        None,
+        "--summarize-provider",
+        help="Summarization provider: 'local' (OpenAI-compatible) or 'pi'.",
+    ),
+    summarize_model: Optional[str] = typer.Option(
+        None,
+        "--summarize-model",
+        help="Model name for summarization (e.g., 'llama3', 'codellama').",
+    ),
 ) -> None:
     """Index a repository's source files into the glma database."""
     from glma.config import load_config
@@ -78,6 +93,51 @@ def index(
     if result.total_files == 0:
         console.print("[yellow]No supported source files found.[/yellow]")
         raise typer.Exit(1)
+
+    # Summarization pass (after indexing)
+    if summarize:
+        from glma.config import load_summarize_config
+        from glma.summarize import summarize_chunks
+        from glma.summarize.providers import OpenAICompatibleProvider, PiProvider
+        from glma.db.ladybug_store import LadybugStore
+
+        # Build summarize CLI overrides
+        summarize_overrides = {"enabled": True}
+        if summarize_provider:
+            summarize_overrides["provider"] = summarize_provider
+        if summarize_model:
+            summarize_overrides["model"] = summarize_model
+
+        summ_cfg = load_summarize_config(repo_path, summarize_overrides)
+
+        # Instantiate provider
+        try:
+            if summ_cfg.provider.value == "pi":
+                provider = PiProvider(model=summ_cfg.model)
+            else:
+                provider = OpenAICompatibleProvider(
+                    base_url=summ_cfg.base_url,
+                    model=summ_cfg.model,
+                )
+        except ImportError as e:
+            console.print(f"[red]Error:[/red] {e}")
+            raise typer.Exit(1)
+
+        # Load all chunks from DB for summarization
+        db_path_summ = repo_path / cfg.output_dir / "db" / "index.lbug"
+        store = LadybugStore(db_path_summ)
+        indexed_files = store.get_indexed_files()
+
+        if not cfg.quiet:
+            console.print(f"[bold]Summarizing[/bold] chunks with {summ_cfg.provider.value} provider...")
+
+        for file_path in sorted(indexed_files.keys()):
+            chunks = store.get_chunks_for_file(file_path)
+            if chunks:
+                summarize_chunks(store, chunks, provider)
+
+        if not cfg.quiet:
+            console.print(f"[green]✓[/green] Summarization complete: {len(indexed_files)} files processed")
 
 
 def _write_output(text: str, output_path: Optional[str]) -> None:
@@ -276,12 +336,7 @@ def export(
     ai_summaries: bool = typer.Option(
         False,
         "--ai-summaries",
-        help="Generate AI summaries via local model (LM Studio, Ollama, etc.).",
-    ),
-    ai_url: Optional[str] = typer.Option(
-        None,
-        "--ai-url",
-        help="Local model API URL (default: http://localhost:1234/v1).",
+        help="Include AI-generated chunk summaries from the index in export output.",
     ),
     include_code: bool = typer.Option(
         False,
@@ -311,8 +366,6 @@ def export(
     export_overrides["output_path"] = output if output != "." else None
     if ai_summaries:
         export_overrides["ai_summaries"] = True
-    if ai_url:
-        export_overrides["ai_base_url"] = ai_url
     if include_code:
         export_overrides["include_code"] = True
 
