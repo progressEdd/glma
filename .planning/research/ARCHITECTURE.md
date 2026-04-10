@@ -1,185 +1,166 @@
 # Architecture Research
 
-**Domain:** Codebase indexing CLI tool with graph database and semantic search
-**Researched:** 2026-04-08
-**Confidence:** MEDIUM
+**Domain:** CLI codebase indexer with AI summarization
+**Researched:** 2026-04-10
+**Confidence:** HIGH
 
-## Recommended Architecture
-
-### System Overview
+## System Overview
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                        CLI Layer                             │
-│  glma index │ glma query │ glma watch │ glma export          │
-├─────────────────────────────────────────────────────────────┤
-│                      Pipeline Layer                           │
-│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐     │
-│  │ Language  │  │  Chunker │  │Relation  │  │ Embedder │     │
-│  │ Detector  │  │          │  │Extractor │  │          │     │
-│  └────┬─────┘  └────┬─────┘  └────┬─────┘  └────┬─────┘     │
-│       │             │             │              │           │
-├───────┴─────────────┴─────────────┴──────────────┴───────────┤
-│                      Storage Layer                            │
-│  ┌──────────────────┐  ┌────────────────────────────────┐    │
-│  │   LanceDB        │  │   Markdown Files               │    │
-│  │   ┌───────────┐  │  │   .glma-index/                 │    │
-│  │   │ chunks    │  │  │     files/<path>.md            │    │
-│  │   │ relations │  │  │     relationships/<path>.md    │    │
-│  │   │ metadata  │  │  │     summary.md                 │    │
-│  │   └───────────┘  │  │                                │    │
-│  └──────────────────┘  └────────────────────────────────┘    │
-├─────────────────────────────────────────────────────────────┤
-│                    Output Layer                               │
-│  Markdown (query results) │ JSON (machine) │ Summary         │
-└─────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────┐
+│                        CLI (typer)                               │
+│  glma index --summarize  |  glma export  |  glma query          │
+└──────────┬───────────────┬──────────────┬───────────────────────┘
+           │               │              │
+┌──────────▼───────────────▼──────────────▼───────────────────────┐
+│                    Indexing Pipeline                              │
+│  walk → detect → hash → parse → extract → attach → summarize →  │
+│  store → write markdown                                          │
+└──────────┬──────────────────────────────────────┬───────────────┘
+           │                                      │
+┌──────────▼──────────┐              ┌────────────▼───────────────┐
+│   LadybugStore      │              │   Summarization Pipeline   │
+│   (real_ladybug)    │◄─────────────│   (NEW)                    │
+│                     │              │                            │
+│  Chunk.summary ─────│── write ────►│  Provider Protocol         │
+│  (already exists)   │              │  ├─ OpenAICompatibleProvider│
+│                     │              │  └─ PiAgentProvider        │
+└──────────┬──────────┘              └────────────────────────────┘
+           │
+┌──────────▼──────────────────────────────────────────────────────┐
+│                     Output Layer                                  │
+│  writer.py (per-file md)  |  export.py (air-gapped)  |          │
+│  query/formatter.py       |  ARCHITECTURE.md (NEW)   |          │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
-### Component Boundaries
+## New Components
 
-| Component | Responsibility | Communicates With |
-|-----------|---------------|-------------------|
-| **CLI** | Parse commands, route to pipeline, format output | Pipeline Layer |
-| **Language Detector** | Map file extensions to tree-sitter grammars | Chunker (provides grammar) |
-| **Chunker** | Parse files with tree-sitter, extract semantic chunks (functions, classes, methods) | Language Detector, Relation Extractor, Storage |
-| **Relation Extractor** | Walk AST to find calls, imports, inheritance, variable references between chunks | Chunker (needs AST), Storage |
-| **Embedder** | Generate vector embeddings for chunks using sentence-transformers | Chunker (provides content), Storage |
-| **Storage** | Persist chunks, relationships, embeddings to LanceDB + markdown | All pipeline components |
-| **Query Engine** | Look up chunks by file path, follow relationships, rank results | Storage |
-| **File Watcher** | Detect filesystem changes, trigger incremental re-index | Pipeline (re-runs changed files) |
-| **Exporter** | Generate full markdown export for air-gapped use | Storage |
+### 1. Summarization Pipeline (`glma/index/summarizer.py` — NEW)
 
-### Data Flow
+**Purpose:** Generate AI summaries for chunks and persist to DB.
 
-**Indexing Pipeline:**
+**Integration points:**
+- Called from `pipeline.py` after chunk extraction, before markdown write
+- Reads chunks from DB, calls provider, writes `chunk.summary` back
+- Incremental: only summarize chunks where `summary` is NULL/empty AND content_hash changed
 
-```
-Repo Path
-    │
-    ▼
-Walk directory (skip .git, node_modules, venvs)
-    │
-    ▼
-For each file:
-    Language Detector → what grammar?
-    │
-    ▼
-    Chunker → parse with tree-sitter → extract chunks
-    │   (function definitions, class definitions, module-level code)
-    │
-    ▼
-    Relation Extractor → walk AST → find:
-    │   - function calls (who calls whom)
-    │   - imports (what depends on what)
-    │   - class inheritance (extends/implements)
-    │   - variable assignments (scope tracking)
-    │
-    ▼
-    Embedder → generate vector for each chunk (optional, async)
-    │
-    ▼
-    Storage → write to LanceDB + generate markdown
-```
-
-**Query Pipeline:**
-
-```
-glma query <filepath>
-    │
-    ▼
-Look up file in LanceDB (all chunks for this path)
-    │
-    ▼
-Follow relationships (what calls functions in this file?)
-    │
-    ▼
-Format as markdown:
-    - File summary
-    - Functions/classes with their code
-    - Incoming dependencies (who uses this)
-    - Outgoing dependencies (what this uses)
-    - Variables and references
-    │
-    ▼
-Output to stdout (agent captures this)
-```
-
-## Patterns to Follow
-
-### Pattern 1: Language Plugin Architecture
-**What:** Each language is a plugin that provides grammar + relationship extraction rules
-**When:** Adding new language support
-**Example:**
+**Interface:**
 ```python
-class LanguagePlugin(ABC):
-    @abstractmethod
-    def get_grammar(self) -> Language: ...
-    
-    @abstractmethod
-    def extract_chunks(self, tree: Tree) -> list[Chunk]: ...
-    
-    @abstractmethod
-    def extract_relations(self, tree: Tree, chunks: list[Chunk]) -> list[Relation]: ...
+class SummarizerProvider(Protocol):
+    def summarize(self, code: str, context: str) -> str: ...
 
-class CPlugin(LanguagePlugin): ...
-class PythonPlugin(LanguagePlugin): ...
+class OpenAICompatibleProvider:
+    """Works with Ollama, LM Studio, llama.cpp server, any OpenAI-compatible API."""
+    def __init__(self, base_url: str, model: str): ...
+
+class PiAgentProvider:
+    """Uses pi's API for summarization — no separate model server needed."""
+    def __init__(self, model: str): ...
+
+def summarize_chunks(
+    store: LadybugStore,
+    chunks: list[Chunk],
+    provider: SummarizerProvider,
+    batch_size: int = 5,
+) -> list[Chunk]:
+    """Summarize chunks that lack summaries. Returns updated chunks."""
 ```
 
-### Pattern 2: Dual Output (DB + Markdown)
-**What:** Every piece of indexed data is written to both LanceDB and markdown simultaneously
-**When:** After chunking and relationship extraction
-**Why:** Markdown is the air-gapped fallback; DB is the queryable index. Writing both ensures they stay in sync.
+**Data flow change:**
+- Current: `extract_chunks()` → `summary=None` → store → export generates summary on-the-fly
+- New: `extract_chunks()` → store → `summarize_chunks()` → update DB → export reads from DB
 
-### Pattern 3: Incremental Indexing via Content Hash
-**What:** Track file content hashes; only re-process files whose hash changed
-**When:** Re-indexing after file changes
-**Why:** Full re-index of large repos is expensive; content hashing is cheap
+**Key insight:** Summarization is a separate pass AFTER indexing, not part of chunk extraction. This keeps the pipeline modular and allows re-summarization without re-indexing.
+
+### 2. Provider Configuration (`glma/models.py` extension)
+
+**New model:**
 ```python
-def should_reindex(file_path, stored_hash):
-    current_hash = sha256(file_path.read_bytes())
-    return current_hash != stored_hash
+class SummarizeConfig(BaseModel):
+    enabled: bool = False
+    provider: str = "local"  # "local" or "pi"
+    base_url: str = "http://localhost:1234/v1"
+    model: str = "default"
+    batch_size: int = 5
 ```
 
-### Pattern 4: Notebook Compaction as Special Parser
-**What:** Jupyter notebooks get their own parser (not tree-sitter) that extracts cells, variables, references
-**When:** Processing `.ipynb` files
-**Why:** Notebooks aren't regular code — they're JSON containers with code cells, markdown cells, outputs, and kernel metadata
+**Config file integration:** `[summarize]` section in `.glma.toml`
 
-## Anti-Patterns to Avoid
+### 3. ARCHITECTURE.md Generator (`glma/export.py` extension)
 
-### Anti-Pattern 1: Monolithic Notebook
-**What:** Putting all logic in a single Jupyter notebook
-**Why bad:** Can't test, can't reuse, can't version properly (JSON diffs)
-**Instead:** Extract into Python modules; use notebooks only for interactive exploration
+**Purpose:** Generate codebase-level architecture overview.
 
-### Anti-Pattern 2: One Big Index
-**What:** Single database for all repos
-**Why bad:** Cross-contamination, no isolation, can't clean up per-repo
-**Instead:** One LanceDB instance per repo (stored in `.glma-index/` inside the repo)
+**Data sources (all already in LadybugStore):**
+- File list with languages and chunk counts
+- Cross-file relationships (imports, calls, includes)
+- Per-file summaries (rule-based or AI)
 
-### Anti-Pattern 3: Greedy Relationship Resolution
-**What:** Trying to resolve all cross-file relationships in a single pass
-**Why bad:** O(n²) complexity, fails on large repos, can't handle incremental updates
-**Instead:** Per-file extraction, then global relationship resolution as a separate pass
+**Generated content:**
+- Project structure tree (directories, file counts)
+- Module dependency graph (who imports whom)
+- Entry points (files with no incoming imports)
+- Key interfaces (most-referenced functions/classes)
 
-### Anti-Pattern 4: Requiring Network for Core Functionality
-**What:** Requiring API calls (LLM, embeddings) for basic indexing
-**Why bad:** Violates air-gapped requirement
-**Instead:** Core indexing (parse + chunk + relationships) works offline. Embeddings and LLM summaries are optional enhancements.
+**Integration:** Called from `export_index()` in export.py, generates ARCHITECTURE.md alongside INDEX.md and RELATIONSHIPS.md.
 
-## Scalability Considerations
+## Modified Components
 
-| Concern | Small repo (<1K files) | Medium (1K-10K) | Large (10K+ like Linux kernel) |
-|---------|------------------------|------------------|--------------------------------|
-| Indexing time | Seconds | Minutes | Tens of minutes |
-| Storage | MBs | 100s MBs | GBs (especially with embeddings) |
-| Query speed | Instant | <100ms | <500ms with proper indexing |
-| Incremental update | Re-index all (fast enough) | Hash-based diff | Hash-based diff + parallel processing |
+### `pipeline.py`
+- Add summarization pass after relationship extraction (Pass 4)
+- Or: make it a separate command `glma summarize` that can run independently
+- Incremental: only process chunks where `summary IS NULL OR summary = ''`
 
-## Sources
+### `ladybug_store.py`
+- Add `update_chunk_summary(chunk_id: str, summary: str)` method
+- Currently `upsert_chunks()` deletes and re-creates — summary would be lost on re-index
+- Need either: (a) preserve summary on re-index via content_hash check, or (b) separate update method
 
-- Existing hackathon architecture (Kuzu-based, notebook-driven)
-- tree-sitter documentation (AST structure, query language)
-- LanceDB documentation (schema design, vector + metadata queries)
-- Code intelligence tools (Sourcegraph, Aider) for architecture patterns
-- Confidence: MEDIUM — architecture is informed by domain knowledge, not production experience with LanceDB at scale
+### `writer.py`
+- Replace placeholder line 274 with actual summary from chunk.summary or rule-based fallback
+- Already has access to chunks with summaries
+
+### `export.py`
+- `generate_ai_summary()` should READ from DB first (chunk.summary), only call LLM if empty
+- `include_code` default changes to `False` in ExportConfig
+- Add `_generate_architecture_md()` function
+
+### `models.py`
+- Add `SummarizeConfig` model
+- Update `ExportConfig.include_code` default to `False`
+- Remove "Phase 3" from chunk.summary description
+
+## Build Order
+
+1. **Bug fixes first** (no new components, low risk):
+   - ExportConfig.include_code default → False
+   - Replace writer.py placeholder
+   - Fix notebook truncation
+
+2. **Summarization infrastructure** (new component):
+   - Add `update_chunk_summary()` to LadybugStore
+   - Create `summarizer.py` with provider protocol
+   - Add `SummarizeConfig` to models.py
+
+3. **CLI integration** (wire it up):
+   - Add `--summarize` flags to `glma index`
+   - Add `glma summarize` standalone command
+   - Config file support
+
+4. **Provider implementations**:
+   - OpenAICompatibleProvider (refactor from existing export.py code)
+   - PiAgentProvider (new)
+
+5. **ARCHITECTURE.md** (uses summaries from DB):
+   - Generate from existing relationship data + summaries
+   - Add to export output
+
+## Integration Considerations
+
+- **Summary preservation on re-index:** When `upsert_chunks()` deletes and re-creates chunks, summaries are lost. Options: (a) read old summaries before upsert and re-attach to matching chunks by content_hash, or (b) only clear summary if content_hash changed. Recommend option (b).
+- **Batch sizing:** Local models have limited concurrent request capacity. Default batch_size=5 with sequential processing is safe.
+- **Summary staleness:** If code changes, summary becomes stale. Use content_hash to detect — if hash matches, keep existing summary.
+
+---
+*Architecture research for: per-chunk AI summarization with pluggable providers*
+*Researched: 2026-04-10*

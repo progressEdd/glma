@@ -1,97 +1,62 @@
 # Stack Research
 
-**Domain:** Codebase indexing CLI tool with graph database and semantic search
-**Researched:** 2026-04-08
-**Confidence:** MEDIUM
+**Domain:** CLI codebase indexer with AI summarization
+**Researched:** 2026-04-10
+**Confidence:** HIGH
 
 ## Recommended Stack
 
-### Core Technologies
+### Core Technologies (already in place)
 
 | Technology | Version | Purpose | Why Recommended |
-|------------|---------|---------|-----------------|
-| Python | 3.13 | Primary language | Already established in project; excellent tree-sitter bindings, CLI tooling ecosystem |
-| tree-sitter | 0.24+ | Code parsing and chunking | Already validated in hackathon; incremental parsing support; 40+ language grammars |
-| LanceDB | 0.20+ | Vector storage + metadata | Serverless, embedded (no separate process), Python-native, supports both vector search AND structured metadata filtering in a single query — ideal for combining semantic search with structural relationships |
-| Click or Typer | Latest | CLI framework | Click is battle-tested; Typer provides Click with modern type-hint ergonomics. Either gives clean subcommand structure (`glma index`, `glma query`, `glma watch`) |
-| watchfiles | Latest | File watching | Rust-based, fast, cross-platform file change detection. Used by uvicorn and other Python tools for reliable watching |
+| ---------- | ------- | ------- | --------------- |
+| real-ladybug | ≥0.15.3 | Graph DB with native vector indices | Already in use, ex-Kuzu, summary field exists on Chunk nodes |
+| tree-sitter | ≥0.25.2 | AST parsing | Already proven for C and Python |
+| typer | ≥0.24.1 | CLI framework | Already in use |
+| pydantic | ≥2.12 | Data models | Already in use, Chunk model has summary field |
+| rich | ≥14.0 | Progress display | Already in use |
 
-### Database Decision: LanceDB over Ladybug
+### New Dependencies Needed
 
-**Recommendation:** LanceDB
+| Library | Version | Purpose | Why Recommended |
+| ------- | ------- | ------- | --------------- |
+| openai | ≥1.30 | LLM API client for summarization | Already used conditionally in export.py; make it a proper dependency for the summarization pipeline. Works with Ollama, LM Studio, llama.cpp server, any OpenAI-compatible API |
+| httpx | ≥0.27 | Async HTTP for pi agent provider | pi's API uses REST; httpx is lightweight, already a transitive dep of openai |
 
-**Why LanceDB over Ladybug (Kuzu successor):**
+### What NOT to Add
 
-| Criterion | LanceDB | Ladybug (ex-Kuzu) |
-|-----------|---------|-------------------|
-| Query model | Vector similarity + metadata filtering (hybrid) | Graph traversal (Cypher-like) |
-| Embeddings | Built-in, manages embedding tables natively | Not supported natively |
-| Schema flexibility | Semi-structured, add columns freely | Strict graph schema required |
-| Zero-config | Yes — embedded, no server, single directory | Requires schema definition, DDL statements |
-| Semantic search | First-class — this IS what it does | Not supported; would need separate vector store |
-| Structural relationships | Via metadata tables + joins | Native graph edges |
-| Python ergonomics | Excellent (PyArrow-based, pandas-like API) | Good but graph query overhead |
+| Avoid | Why | Use Instead |
+| ----- | --- | ----------- |
+| litellm | Overkill for 2 provider backends, adds heavy dependency tree | Simple provider protocol with OpenAI client + httpx |
+| langchain | Massive framework, not needed for single-purpose summarization | Direct openai client calls |
+| sentence-transformers | Embedding is future milestone, not v1.1 | Defer to semantic search milestone |
+| tenacity | Retry logic is overkill for this scope | Simple try/except with logging (already pattern in codebase) |
 
-**The critical insight:** This tool needs BOTH structural relationships (what calls what) AND semantic search (find code by meaning). LanceDB handles semantic search natively and can represent structural relationships through metadata tables with foreign-key-like joins. A pure graph DB would need a separate vector store bolted on. LanceDB unifies both needs.
+### Provider Architecture
 
-**How structural relationships work in LanceDB:**
-- Each code chunk is a row with: `id`, `file_path`, `chunk_type` (function/class/module), `name`, `content`, `embedding`, `metadata` (JSON)
-- Relationships stored in a separate `relationships` table: `source_id`, `target_id`, `rel_type` (calls, imports, contains, inherits)
-- Query: "get function X" → get chunk → join relationships → get all callers/callees
-- This isn't as elegant as graph traversal but covers the 80% case and avoids running two databases
+**Protocol/ABC approach** (not a library):
+- `SummarizerProvider` protocol with `summarize(code: str, context: str) -> str` method
+- `OpenAICompatibleProvider` — wraps `openai.OpenAI` client, works with Ollama/LM Studio/llama.cpp/local servers
+- `PiAgentProvider` — calls pi's API to summarize code (httpx-based)
+- Both produce same output: a summary string that gets written to `chunk.summary` in DB
 
-### Supporting Libraries
+**Configuration:**
+- `.glma.toml` section: `[summarize]` with `provider`, `model`, `base_url` fields
+- CLI flags: `glma index --summarize --summarize-provider local|pi --summarize-model <name>`
 
-| Library | Version | Purpose | When to Use |
-|---------|---------|---------|-------------|
-| tree-sitter-c | 0.24+ | C language grammar | Parsing C source files |
-| tree-sitter-python | 0.23+ | Python language grammar | Parsing Python source files |
-| sentence-transformers | Latest | Local embedding generation | Creating vector representations of code chunks for semantic search |
-| nbformat | Latest | Jupyter notebook parsing | `.ipynb` compaction (read notebook JSON, extract cells, variables, references) |
-| pygments | Latest | Syntax highlighting | Generating highlighted code in markdown output |
-| rich | Latest | CLI output formatting | Progress bars, tables, colored output |
-| pydantic | Latest | Data models | Typed schemas for chunks, relationships, index metadata |
+## Version Compatibility
 
-### Embedding Strategy
-
-| Approach | Pros | Cons | Recommendation |
-|----------|------|------|----------------|
-| Local embeddings (sentence-transformers) | No API cost, offline capable, air-gapped compatible | Lower quality than OpenAI embeddings | ✓ Recommended — aligns with air-gapped requirement |
-| OpenAI embeddings | Higher quality | Requires API, not air-gapped compatible | Optional fallback |
-| Code-specific models (CodeBERT, UniXcoder) | Better code understanding | Larger models, slower | Future optimization |
-
-**Recommended model:** `all-MiniLM-L6-v2` (small, fast, good quality) or `jina-embeddings-v2-base-code` (code-optimized, slightly larger).
-
-## Alternatives Considered
-
-| Category | Recommended | Alternative | Why Not |
-|----------|-------------|-------------|---------|
-| Database | LanceDB | Ladybug/Kuzu | Needs separate vector store for semantic search; schema overhead for exploratory indexing |
-| Database | LanceDB | SQLite + sqlite-vec | More manual work; LanceDB handles embeddings natively |
-| Database | LanceDB | ChromaDB | ChromaDB requires a server process; LanceDB is truly embedded |
-| CLI | Typer | Click | Click more verbose but more mature; Typer is fine either way |
-| Parsing | tree-sitter | AST (per-language) | Tree-sitter is language-agnostic; per-language ASTs would mean N parsers |
-| Parsing | tree-sitter | LSP (Language Server Protocol) | LSP requires running a language server per language; heavyweight for a CLI tool |
-| Watching | watchfiles | watchdog | watchfiles is Rust-based and faster; watchdog has more edge cases |
-
-## Installation
-
-```bash
-# Core
-pip install tree-sitter tree-sitter-c tree-sitter-python lancedb
-pip install click  # or typer
-pip install sentence-transformers  # for embeddings
-
-# Supporting
-pip install nbformat pygments rich pydantic watchfiles
-
-# Dev
-pip install pytest pytest-cov ruff
-```
+| Package | Compatible With | Notes |
+| ------- | --------------- | ----- |
+| openai ≥1.30 | Python 3.13 | Works with any OpenAI-compatible server |
+| httpx ≥0.27 | Python 3.13 | Already transitive dep of openai |
 
 ## Sources
 
-- LanceDB documentation and GitHub (lancedb/lancedb)
-- tree-sitter documentation (tree-sitter.github.io)
-- Existing project experience (hackathon validation)
-- Confidence: MEDIUM — versions based on current knowledge, verify with pip/PyPI before pinning
+- Existing codebase analysis — openai already conditionally imported in export.py
+- Ladybug DB schema — Chunk.summary STRING field already exists
+- pyproject.toml — current dependency versions verified
+
+---
+*Stack research for: per-chunk AI summarization with pluggable providers*
+*Researched: 2026-04-10*
