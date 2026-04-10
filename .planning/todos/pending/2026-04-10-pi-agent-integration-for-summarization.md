@@ -19,10 +19,18 @@ Pi (or any coding agent) already has an LLM connection and understands code cont
 
 ## Solution
 
-1. Add an agent-based summarization backend alongside the existing OpenAI-compatible one
-2. Could work as:
-   - A pi extension/skill that hooks into the glma export pipeline
-   - A `--summarize-via agent` CLI flag that delegates to whatever agent is running
-   - Or a simple stdin/stdout protocol where glma pipes chunk data out and the agent pipes summaries back
-3. Fallback chain: agent (if available) → local LLM (if running) → rule-based summaries (current default)
+**Preferred: pi extension with `glma_summarize` tool**
+
+1. Create a pi extension (~/.pi/agent/extensions/glma-summarize.ts) that registers a tool:
+   - Tool reads chunks needing summaries from glma DB (via `glma` CLI or direct DB access)
+   - Agent loops: tool returns batch of chunks → agent summarizes each → tool writes summaries back
+   - State tracked via `pi.appendEntry()` for crash recovery / resume
+2. No separate LLM server needed — uses whatever model pi is already connected to
+3. Fallback chain: pi extension (if running) → local LLM (--ai-summaries, existing) → rule-based (default)
 4. Would also solve the per-chunk summary problem (related todo) since the agent can batch-summarize efficiently
+
+**Alternative: SDK headless session**
+- Use `createAgentSession()` with `SessionManager.inMemory()` to spin up a background session
+- Pipe chunk data in, collect summary text from streaming events
+- Works from any Node.js process, no TUI needed
+- Could be triggered from glma CLI as `glma export --summarize-via agent`
