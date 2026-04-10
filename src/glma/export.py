@@ -409,16 +409,49 @@ def _get_module_name(file_path: str) -> str:
         Module name string.
     """
     parts = Path(file_path).parts
-    if len(parts) >= 3:
-        # e.g., src/glma/db/store.py → db
+    if len(parts) >= 2:
+        # e.g., db/store.py → db, src/glma/db/store.py → db
         # Use the directory just before the filename
         return parts[-2]
-    elif len(parts) == 2:
-        # e.g., src/cli.py → cli
-        return Path(file_path).stem
     else:
-        # e.g., cli.py → cli
+        # e.g., cli.py → cli (root-level file)
         return Path(file_path).stem
+
+
+def _module_from_import_name(import_name: str, file_data: dict[str, dict]) -> Optional[str]:
+    """Resolve an import name (e.g., 'glma.export') to a module name using file_data.
+
+    Tries to match the import name against file paths in file_data.
+    Falls back to extracting the last meaningful segment from the import path.
+
+    Args:
+        import_name: Dotted import path (e.g., 'glma.db.ladybug_store').
+        file_data: Dict of {path: {...}} for file path matching.
+
+    Returns:
+        Module name string or None if unresolvable.
+    """
+    if not import_name:
+        return None
+
+    # Try direct match: find a file whose stem matches the last segment of the import
+    parts = import_name.split(".")
+    if len(parts) >= 2:
+        # e.g., glma.export → look for export.py or export/ directory
+        last_part = parts[-1]
+        for fp in file_data:
+            p = Path(fp)
+            if p.stem == last_part or p.parts[-2] if len(p.parts) >= 2 else "" == last_part:
+                return _get_module_name(fp)
+
+    # Fallback: use the last segment as a heuristic module name
+    # e.g., 'glma.models' → 'models', 'glma.db.ladybug_store' → 'ladybug_store' → 'db'
+    for fp in file_data:
+        stem = Path(fp).stem
+        if stem == parts[-1]:
+            return _get_module_name(fp)
+
+    return None
 
 
 def _group_by_module(file_data: dict[str, dict]) -> dict[str, list[str]]:
@@ -481,22 +514,47 @@ def _detect_entry_points(file_data: dict[str, dict]) -> list[dict]:
                     })
                     break
 
-    # Fan-in analysis: files with zero incoming imports and outgoing relationships
+    # Fan-in analysis: files that are not imported by any other file
+    # Build a set of files that ARE imported (have incoming import references)
+    imported_files: set[str] = set()
+    for file_path, data in file_data.items():
+        chunks = data.get("chunks", [])
+        chunk_ids = {c.id for c in chunks}
+        for rel in data.get("relationships", []):
+            source_id = rel.get("source_id", "")
+            target_id = rel.get("target_id", "")
+            if rel.get("rel_type") != "imports" or source_id not in chunk_ids:
+                continue
+
+            if source_id != target_id:
+                # Resolved: target is in another file
+                target_file = target_id.split("::")[0] if "::" in target_id else ""
+                if target_file and target_file != file_path:
+                    imported_files.add(target_file)
+            else:
+                # Unresolved: match by import name
+                target_name = rel.get("target_name", "")
+                if target_name:
+                    last_part = target_name.split(".")[-1]
+                    for other_fp, other_data in file_data.items():
+                        if other_fp == file_path:
+                            continue
+                        if Path(other_fp).stem == last_part:
+                            imported_files.add(other_fp)
+
     for file_path, data in file_data.items():
         if file_path in convention_files:
-            continue  # Already detected by convention
+            continue
 
         relationships = data.get("relationships", [])
-        has_incoming_imports = any(
-            r.get("direction") == "incoming" and r.get("rel_type") == "imports"
-            for r in relationships
-        )
+        chunks = data.get("chunks", [])
         has_outgoing = any(
-            r.get("direction") != "incoming" and r.get("rel_type") in ("imports", "calls")
+            r.get("rel_type") in ("imports", "calls")
+            and r.get("source_id", "") in {c.id for c in chunks}
             for r in relationships
         )
 
-        if not has_incoming_imports and has_outgoing:
+        if file_path not in imported_files and has_outgoing:
             chunks = data.get("chunks", [])
             entry_points.append({
                 "path": file_path,
@@ -531,32 +589,45 @@ def _compute_key_interfaces(file_data: dict[str, dict]) -> list[dict]:
             }
 
     # Count incoming edges per chunk from other files
+    # Use both resolved cross-file relationships and unresolved import names
     incoming_counts: dict[str, int] = {}  # chunk_id → count
     source_files: dict[str, set[str]] = {}  # chunk_id → set of source files
 
-    for file_path, data in file_data.items():
-        chunk_ids = {c.id for c in data.get("chunks", [])}
-        for rel in data.get("relationships", []):
-            if rel.get("direction") == "incoming" and rel.get("rel_type") in ("imports", "calls"):
-                target_id = rel.get("target_id", "")
-                if target_id and target_id in chunk_ids:
-                    incoming_counts[target_id] = incoming_counts.get(target_id, 0) + 1
-                    source_files.setdefault(target_id, set()).add(file_path)
+    # Build import-name → chunk_id map for unresolved imports
+    import_to_chunk: dict[str, list[str]] = {}  # import_name → [chunk_ids]
+    for cid, info in chunk_info.items():
+        name = info.get("name", "")
+        if name:
+            import_to_chunk.setdefault(name, []).append(cid)
 
-    # Also count from outgoing relationships pointing to known chunks in other files
     for file_path, data in file_data.items():
         chunk_ids = {c.id for c in data.get("chunks", [])}
         for rel in data.get("relationships", []):
+            if rel.get("rel_type") not in ("imports", "calls"):
+                continue
+
+            source_id = rel.get("source_id", "")
             target_id = rel.get("target_id", "")
-            if (
-                target_id
-                and target_id not in chunk_ids  # cross-file
-                and rel.get("source_id") != target_id  # not self-referential
-                and rel.get("rel_type") in ("imports", "calls")
-            ):
+
+            if source_id not in chunk_ids:
+                continue
+
+            if source_id != target_id:
+                # Resolved cross-file relationship
                 if target_id in chunk_info:
                     incoming_counts[target_id] = incoming_counts.get(target_id, 0) + 1
                     source_files.setdefault(target_id, set()).add(file_path)
+            else:
+                # Unresolved — use target_name to find matching chunks
+                target_name = rel.get("target_name", "")
+                if target_name:
+                    # Try exact match on import name's last segment
+                    last_part = target_name.split(".")[-1]
+                    for matched_cid in import_to_chunk.get(last_part, []):
+                        # Only count if the matched chunk is in a different file
+                        if chunk_info[matched_cid].get("file", "") != file_path:
+                            incoming_counts[matched_cid] = incoming_counts.get(matched_cid, 0) + 1
+                            source_files.setdefault(matched_cid, set()).add(file_path)
 
     # Sort by count descending and take top 10
     sorted_ids = sorted(incoming_counts.keys(), key=lambda x: -incoming_counts.get(x, 0))[:10]
@@ -656,25 +727,30 @@ def generate_architecture_md(file_data: dict[str, dict]) -> str:
         chunk_ids = {c.id for c in chunks}
 
         for rel in data.get("relationships", []):
-            source_id = rel.get("source_id", "")
-            target_id = rel.get("target_id", "")
-
-            # Skip self-referential edges
-            if source_id == target_id:
-                continue
-            # Only outgoing relationships from our files
-            if source_id not in chunk_ids:
-                continue
             if rel.get("rel_type") not in ("imports", "calls"):
                 continue
 
-            # Resolve target file
-            target_file = target_id.split("::")[0] if "::" in target_id else ""
-            if not target_file or target_file == file_path:
+            source_id = rel.get("source_id", "")
+            target_id = rel.get("target_id", "")
+
+            # Only outgoing relationships from our files
+            if source_id not in chunk_ids:
                 continue
 
-            target_module = _get_module_name(target_file)
-            if target_module != my_module and target_file in file_data:
+            target_module = None
+
+            if source_id != target_id:
+                # Resolved cross-file relationship
+                target_file = target_id.split("::")[0] if "::" in target_id else ""
+                if target_file and target_file != file_path and target_file in file_data:
+                    target_module = _get_module_name(target_file)
+            else:
+                # Unresolved (self-referential) — use target_name to infer module
+                target_name = rel.get("target_name", "")
+                if target_name:
+                    target_module = _module_from_import_name(target_name, file_data)
+
+            if target_module and target_module != my_module:
                 module_deps.setdefault(my_module, set()).add(target_module)
 
     # Render dependency table
