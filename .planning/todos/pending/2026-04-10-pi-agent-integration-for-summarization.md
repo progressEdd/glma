@@ -55,12 +55,69 @@ No API keys or base_url needed — pi owns those.
 2. Local models (Ollama, LM Studio, etc.) registered once in pi's models.json — extension uses them like any other model
 3. API keys only in one place: pi's auth.json
 
-### Fallback chain for `glma export`
+### Standalone mode (no pi): glma owns the model endpoint
+
+When pi isn't running, glma talks to a local LLM directly via OpenAI-compatible API.
+Currently only has `--ai-url` and `--ai-model` as raw flags. Should add **named provider presets**
+so users don't have to remember ports and paths.
+
+#### Preset defaults for common local servers
+
+| Provider | Default URL | Default Model | Notes |
+| -------- | ----------- | ------------- | ----- |
+| `lmstudio` | `http://localhost:1234/v1` | loaded model | Current default, LM Studio OpenAI compat server |
+| `ollama` | `http://localhost:11434/v1` | `llama3` | Ollama's OpenAI compat endpoint (requires `OLLAMA_HOST` or default) |
+| `llamacpp` | `http://localhost:8080/v1` | `default` | llama.cpp server `--port 8080` with OpenAI compat |
+| `vllm` | `http://localhost:8000/v1` | loaded model | vLLM's OpenAI-compatible server |
+| `aphrodite` | `http://localhost:7860/v1` | loaded model | Aphrodite Engine OpenAI compat |
+
+#### CLI usage (proposed)
+
+```bash
+# Easiest: just name the provider, glma knows the defaults
+ glma export --ai-summaries --ai-provider ollama
+ glma export --ai-summaries --ai-provider lmstudio
+ glma export --ai-summaries --ai-provider llamacpp --ai-model my-model
+
+# Override URL if non-default port
+ glma export --ai-summaries --ai-provider ollama --ai-url http://localhost:11435/v1
+
+# Raw: specify everything manually (backward compat)
+ glma export --ai-summaries --ai-url http://localhost:1234/v1 --ai-model llama3
+
+# Shortcut: --ai-summaries alone defaults to lmstudio (current behavior)
+ glma export --ai-summaries
+```
+
+#### Implementation in models.py
+
+```python
+class AIProvider(str, Enum):
+    lmstudio = "lmstudio"
+    ollama = "ollama"
+    llamacpp = "llamacpp"
+    vllm = "vllm"
+    aphrodite = "aphrodite"
+    custom = "custom"
+
+PROVIDER_DEFAULTS = {
+    AIProvider.lmstudio: {"base_url": "http://localhost:1234/v1", "model": "default"},
+    AIProvider.ollama:   {"base_url": "http://localhost:11434/v1", "model": "llama3"},
+    AIProvider.llamacpp: {"base_url": "http://localhost:8080/v1", "model": "default"},
+    AIProvider.vllm:     {"base_url": "http://localhost:8000/v1", "model": "default"},
+    AIProvider.aphrodite:{"base_url": "http://localhost:7860/v1", "model": "default"},
+}
+```
+
+### Full fallback chain for `glma export`
 
 ```
 pi extension running?  → use pi's model (respects model_hint from glma.yaml)
   ↓ no
---ai-summaries flag?   → use local LLM endpoint directly (existing path, glma owns model)
+--ai-summaries flag?   → use local LLM endpoint
+  ├── --ai-provider <name>?  → use preset defaults for that provider
+  ├── --ai-url given?        → use that URL directly
+  └── neither?               → default to lmstudio (localhost:1234/v1)
   ↓ no
 rule-based summary     → no model needed (current default)
 ```
