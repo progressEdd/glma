@@ -211,7 +211,7 @@ def query(
             sys.stderr.write(f"Error: File not found: {filepath}\n")
             raise typer.Exit(1)
         from glma.query.notebook import compact_notebook
-        result_text = compact_notebook(disk_path, include_outputs=include_outputs)
+        result_text = compact_notebook(disk_path, include_outputs=include_outputs, include_code=not summary_only)
         _write_output(result_text, output)
         return
 

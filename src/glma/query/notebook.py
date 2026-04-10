@@ -40,6 +40,7 @@ def _format_cell(
     variable_flow: dict,
     include_outputs: bool,
     outputs: list,
+    include_code: bool = True,
 ) -> list[str]:
     """Format a single cell's markdown output."""
     lines: list[str] = []
@@ -56,9 +57,19 @@ def _format_cell(
     # Code cell
     lines.append(f"### Cell {index} [code]")
     lines.append("")
-    lines.append("```python")
-    lines.append(cell_info.source)
-    lines.append("```")
+
+    if include_code:
+        lines.append("```python")
+        lines.append(cell_info.source)
+        lines.append("```")
+    else:
+        # Summary mode: show first line + line count
+        source_lines = cell_info.source.strip().splitlines()
+        if source_lines:
+            first_line = source_lines[0][:80]
+            lines.append(f"*{len(source_lines)} lines* — `{first_line}{'...' if len(source_lines[0]) > 80 else ''}`")
+        else:
+            lines.append("*(empty cell)*")
 
     # Per-statement annotations
     if cell_info.statements:
@@ -123,12 +134,14 @@ def _format_cell(
     return lines
 
 
-def compact_notebook(filepath: str | Path, include_outputs: bool = False) -> str:
+def compact_notebook(filepath: str | Path, include_outputs: bool = False, include_code: bool = True) -> str:
     """Compact a Jupyter notebook into layered markdown.
 
     Args:
         filepath: Path to the .ipynb file.
         include_outputs: If True, include cell outputs in the output.
+        include_code: If True, include full source code. If False, show only
+            first line + line count per cell (summary mode).
 
     Returns:
         Compacted markdown string.
@@ -169,7 +182,7 @@ def compact_notebook(filepath: str | Path, include_outputs: bool = False) -> str
     for index, cell in enumerate(nb.cells):
         cell_info = cell_infos[index]
         outputs = cell.get("outputs", []) if cell.cell_type == "code" else []
-        cell_lines = _format_cell(index, cell_info, flow, include_outputs, outputs)
+        cell_lines = _format_cell(index, cell_info, flow, include_outputs, outputs, include_code=include_code)
         lines.extend(cell_lines)
 
     # Variable Flow table
