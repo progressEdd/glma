@@ -396,6 +396,338 @@ def generate_relationships_md(
     return "\n".join(lines)
 
 
+def _get_module_name(file_path: str) -> str:
+    """Extract module name from file path.
+
+    Files in subdirectories get the directory name as their module.
+    Root-level files get their filename stem as the module name.
+
+    Args:
+        file_path: Relative file path (e.g., 'src/glma/db/store.py').
+
+    Returns:
+        Module name string.
+    """
+    parts = Path(file_path).parts
+    if len(parts) >= 3:
+        # e.g., src/glma/db/store.py → db
+        # Use the directory just before the filename
+        return parts[-2]
+    elif len(parts) == 2:
+        # e.g., src/cli.py → cli
+        return Path(file_path).stem
+    else:
+        # e.g., cli.py → cli
+        return Path(file_path).stem
+
+
+def _group_by_module(file_data: dict[str, dict]) -> dict[str, list[str]]:
+    """Group file paths by their module name.
+
+    Args:
+        file_data: Dict of {path: {record, chunks, relationships, summary}}.
+
+    Returns:
+        Dict of {module_name: [file_paths]}, sorted by module name.
+    """
+    modules: dict[str, list[str]] = {}
+    for file_path in file_data:
+        module = _get_module_name(file_path)
+        modules.setdefault(module, []).append(file_path)
+    # Sort file paths within each module
+    for mod in modules:
+        modules[mod].sort()
+    return dict(sorted(modules.items()))
+
+
+def _detect_entry_points(file_data: dict[str, dict]) -> list[dict]:
+    """Detect entry points via convention checks and fan-in analysis.
+
+    Convention checks: __main__.py, cli.py, main.py filenames, and
+    ``if __name__ == "__main__"`` in chunk content.
+    Fan-in analysis: files with zero incoming imports and outgoing
+    relationships are likely entry points.
+
+    Args:
+        file_data: Dict of {path: {record, chunks, relationships, summary}}.
+
+    Returns:
+        List of dicts with keys: path, method, chunk_names.
+    """
+    entry_points: list[dict] = []
+    convention_files: set[str] = set()
+
+    # Convention detection
+    for file_path, data in file_data.items():
+        stem = Path(file_path).stem
+        if stem in ("__main__", "cli", "main"):
+            convention_files.add(file_path)
+            chunks = data.get("chunks", [])
+            entry_points.append({
+                "path": file_path,
+                "method": "detected entry point",
+                "chunk_names": [c.name for c in chunks if c.parent_id is None],
+            })
+        else:
+            # Check chunk content for __name__ == "__main__"
+            for chunk in data.get("chunks", []):
+                if "if __name__" in chunk.content:
+                    convention_files.add(file_path)
+                    chunks = data.get("chunks", [])
+                    entry_points.append({
+                        "path": file_path,
+                        "method": "detected entry point",
+                        "chunk_names": [c.name for c in chunks if c.parent_id is None],
+                    })
+                    break
+
+    # Fan-in analysis: files with zero incoming imports and outgoing relationships
+    for file_path, data in file_data.items():
+        if file_path in convention_files:
+            continue  # Already detected by convention
+
+        relationships = data.get("relationships", [])
+        has_incoming_imports = any(
+            r.get("direction") == "incoming" and r.get("rel_type") == "imports"
+            for r in relationships
+        )
+        has_outgoing = any(
+            r.get("direction") != "incoming" and r.get("rel_type") in ("imports", "calls")
+            for r in relationships
+        )
+
+        if not has_incoming_imports and has_outgoing:
+            chunks = data.get("chunks", [])
+            entry_points.append({
+                "path": file_path,
+                "method": "likely entry point",
+                "chunk_names": [c.name for c in chunks if c.parent_id is None],
+            })
+
+    return entry_points
+
+
+def _compute_key_interfaces(file_data: dict[str, dict]) -> list[dict]:
+    """Identify key interfaces by counting incoming relationships per chunk.
+
+    Chunks with many incoming imports/calls from other files are key interfaces.
+
+    Args:
+        file_data: Dict of {path: {record, chunks, relationships, summary}}.
+
+    Returns:
+        List of dicts sorted by used_by_count descending, with keys:
+        name, type, file, used_by_count, summary.
+    """
+    # Build a map of chunk_id → chunk info for resolving targets
+    chunk_info: dict[str, dict] = {}
+    for file_path, data in file_data.items():
+        for chunk in data.get("chunks", []):
+            chunk_info[chunk.id] = {
+                "name": chunk.name,
+                "type": chunk.chunk_type.value,
+                "file": file_path,
+                "summary": chunk.summary or "",
+            }
+
+    # Count incoming edges per chunk from other files
+    incoming_counts: dict[str, int] = {}  # chunk_id → count
+    source_files: dict[str, set[str]] = {}  # chunk_id → set of source files
+
+    for file_path, data in file_data.items():
+        chunk_ids = {c.id for c in data.get("chunks", [])}
+        for rel in data.get("relationships", []):
+            if rel.get("direction") == "incoming" and rel.get("rel_type") in ("imports", "calls"):
+                target_id = rel.get("target_id", "")
+                if target_id and target_id in chunk_ids:
+                    incoming_counts[target_id] = incoming_counts.get(target_id, 0) + 1
+                    source_files.setdefault(target_id, set()).add(file_path)
+
+    # Also count from outgoing relationships pointing to known chunks in other files
+    for file_path, data in file_data.items():
+        chunk_ids = {c.id for c in data.get("chunks", [])}
+        for rel in data.get("relationships", []):
+            target_id = rel.get("target_id", "")
+            if (
+                target_id
+                and target_id not in chunk_ids  # cross-file
+                and rel.get("source_id") != target_id  # not self-referential
+                and rel.get("rel_type") in ("imports", "calls")
+            ):
+                if target_id in chunk_info:
+                    incoming_counts[target_id] = incoming_counts.get(target_id, 0) + 1
+                    source_files.setdefault(target_id, set()).add(file_path)
+
+    # Sort by count descending and take top 10
+    sorted_ids = sorted(incoming_counts.keys(), key=lambda x: -incoming_counts.get(x, 0))[:10]
+
+    result = []
+    for cid in sorted_ids:
+        info = chunk_info.get(cid, {})
+        result.append({
+            "name": info.get("name", "?"),
+            "type": info.get("type", "?"),
+            "file": info.get("file", "?"),
+            "used_by_count": len(source_files.get(cid, set())),
+            "summary": info.get("summary", ""),
+        })
+
+    return result
+
+
+def generate_architecture_md(file_data: dict[str, dict]) -> str:
+    """Generate ARCHITECTURE.md with module-level codebase overview.
+
+    Produces a high-level view of the codebase organized by modules,
+    including dependency graph, entry points, and key interfaces.
+    All data is derived from the pre-assembled file_data dict — no
+    new store queries are needed.
+
+    Args:
+        file_data: Dict of {path: {"record", "chunks", "relationships", "summary"}}.
+
+    Returns:
+        Complete ARCHITECTURE.md markdown string.
+    """
+    lines: list[str] = []
+
+    # Header
+    lines.append("# Architecture Overview")
+    lines.append("")
+    lines.append(f"**Generated:** {datetime.now(timezone.utc).isoformat()}")
+
+    # Module grouping
+    modules = _group_by_module(file_data)
+    lines.append(f"**Total Modules:** {len(modules)}")
+    lines.append("")
+
+    # ── Section 1: Project Structure Overview ──
+    lines.append("## Project Structure Overview")
+    lines.append("")
+
+    for module_name, file_paths in modules.items():
+        lines.append(f"### Module: {module_name}")
+        lines.append("")
+        lines.append("| File | Chunks | Summary |")
+        lines.append("| ---- | ------ | ------- |")
+
+        module_chunks: list[Chunk] = []
+        for fp in file_paths:
+            data = file_data[fp]
+            chunks = data.get("chunks", [])
+            module_chunks.extend(chunks)
+            summary = data.get("summary", "")
+            short_summary = summary[:80] + "..." if len(summary) > 80 else summary
+            lines.append(f"| {fp} | {len(chunks)} | {short_summary} |")
+
+        lines.append("")
+
+        # Module narrative from chunk summaries
+        narrative_parts: list[str] = []
+        for chunk in module_chunks:
+            if chunk.summary:
+                narrative_parts.append(f"{chunk.name}: {chunk.summary}")
+
+        if not narrative_parts:
+            # Fallback: use rule-based summaries per file
+            for fp in file_paths:
+                data = file_data[fp]
+                chunks = data.get("chunks", [])
+                rels = data.get("relationships", [])
+                rule = generate_rule_summary(fp, chunks, rels)
+                narrative_parts.append(f"{Path(fp).stem}: {rule}")
+
+        if narrative_parts:
+            narrative = "; ".join(narrative_parts)
+            if len(narrative) > 300:
+                narrative = narrative[:297] + "..."
+            lines.append(narrative)
+            lines.append("")
+
+    # ── Section 2: Module Dependency Graph ──
+    lines.append("## Module Dependencies")
+    lines.append("")
+
+    # Compute module-level dependencies
+    module_deps: dict[str, set[str]] = {}
+    for file_path, data in file_data.items():
+        my_module = _get_module_name(file_path)
+        chunks = data.get("chunks", [])
+        chunk_ids = {c.id for c in chunks}
+
+        for rel in data.get("relationships", []):
+            source_id = rel.get("source_id", "")
+            target_id = rel.get("target_id", "")
+
+            # Skip self-referential edges
+            if source_id == target_id:
+                continue
+            # Only outgoing relationships from our files
+            if source_id not in chunk_ids:
+                continue
+            if rel.get("rel_type") not in ("imports", "calls"):
+                continue
+
+            # Resolve target file
+            target_file = target_id.split("::")[0] if "::" in target_id else ""
+            if not target_file or target_file == file_path:
+                continue
+
+            target_module = _get_module_name(target_file)
+            if target_module != my_module and target_file in file_data:
+                module_deps.setdefault(my_module, set()).add(target_module)
+
+    # Render dependency table
+    all_modules_with_deps = sorted(
+        set(modules.keys()) | set(module_deps.keys()) | {d for deps in module_deps.values() for d in deps}
+    )
+
+    lines.append("| Module | Depends On |")
+    lines.append("| ------ | ---------- |")
+    for mod in all_modules_with_deps:
+        deps = module_deps.get(mod, set())
+        if deps:
+            lines.append(f"| {mod} | {', '.join(sorted(deps))} |")
+        else:
+            lines.append(f"| {mod} | *(no external dependencies)* |")
+    lines.append("")
+
+    # ── Section 3: Entry Points ──
+    lines.append("## Entry Points")
+    lines.append("")
+
+    entry_points = _detect_entry_points(file_data)
+    if entry_points:
+        lines.append("| File | Detection Method | Key Chunks |")
+        lines.append("| ---- | ---------------- | ---------- |")
+        for ep in entry_points:
+            chunk_str = ", ".join(ep["chunk_names"][:5]) or "*(no top-level chunks)*"
+            lines.append(f"| {ep['path']} | {ep['method']} | {chunk_str} |")
+    else:
+        lines.append("*(No entry points detected)*")
+    lines.append("")
+
+    # ── Section 4: Key Interfaces ──
+    lines.append("## Key Interfaces")
+    lines.append("")
+
+    key_interfaces = _compute_key_interfaces(file_data)
+    if key_interfaces:
+        lines.append("| Name | Type | File | Used By (files) |")
+        lines.append("| ---- | ---- | ---- | --------------- |")
+        for iface in key_interfaces:
+            name_str = iface["name"]
+            if iface["summary"]:
+                summary_short = iface["summary"][:40] + "..." if len(iface["summary"]) > 40 else iface["summary"]
+                name_str = f"{name_str} ({summary_short})"
+            lines.append(f"| {name_str} | {iface['type']} | {iface['file']} | {iface['used_by_count']} files |")
+    else:
+        lines.append("*(No key interfaces identified)*")
+    lines.append("")
+
+    return "\n".join(lines)
+
+
 def export_index(
     repo_root: Path,
     config: ExportConfig,
@@ -455,19 +787,20 @@ def export_index(
     # Generate root files
     index_md = generate_index_md(indexed_files, file_data)
     rels_md = generate_relationships_md(file_data)
+    arch_md = generate_architecture_md(file_data)
 
     # Determine output mode
     output = config.output_path or "glma-export"
 
     if output == "-":
         # Stdout mode: stream tar to stdout
-        _write_tar_to_stream(sys.stdout.buffer, file_exports, index_md, rels_md)
+        _write_tar_to_stream(sys.stdout.buffer, file_exports, index_md, rels_md, arch_md)
         return Path("-")
     elif output.endswith(".tar.gz") or output.endswith(".tgz"):
         # Archive mode
         output_path = Path(output)
         with open(output_path, "wb") as f:
-            _write_tar_to_stream(f, file_exports, index_md, rels_md)
+            _write_tar_to_stream(f, file_exports, index_md, rels_md, arch_md)
         if console:
             console.print(f"[green]✓[/green] Exported to {output_path}")
         return output_path
@@ -475,7 +808,7 @@ def export_index(
         # Directory mode
         output_dir = Path(output)
         output_dir.mkdir(parents=True, exist_ok=True)
-        _write_files_to_dir(output_dir, file_exports, index_md, rels_md)
+        _write_files_to_dir(output_dir, file_exports, index_md, rels_md, arch_md)
         if console:
             console.print(f"[green]✓[/green] Exported to {output_dir}/")
         return output_dir
@@ -486,6 +819,7 @@ def _write_files_to_dir(
     file_exports: dict[str, str],
     index_md: str,
     rels_md: str,
+    arch_md: str,
 ) -> None:
     """Write export files to a directory.
 
@@ -494,6 +828,7 @@ def _write_files_to_dir(
         file_exports: Dict of {relative_path: markdown_content}.
         index_md: INDEX.md content.
         rels_md: RELATIONSHIPS.md content.
+        arch_md: ARCHITECTURE.md content.
     """
     # Write per-file exports
     for file_path, content in file_exports.items():
@@ -508,12 +843,16 @@ def _write_files_to_dir(
     # Write RELATIONSHIPS.md
     (output_dir / "RELATIONSHIPS.md").write_text(rels_md, encoding="utf-8")
 
+    # Write ARCHITECTURE.md
+    (output_dir / "ARCHITECTURE.md").write_text(arch_md, encoding="utf-8")
+
 
 def _write_tar_to_stream(
     stream: io.RawIOBase,
     file_exports: dict[str, str],
     index_md: str,
     rels_md: str,
+    arch_md: str,
 ) -> None:
     """Write export as tar.gz archive to a stream.
 
@@ -522,6 +861,7 @@ def _write_tar_to_stream(
         file_exports: Dict of {relative_path: markdown_content}.
         index_md: INDEX.md content.
         rels_md: RELATIONSHIPS.md content.
+        arch_md: ARCHITECTURE.md content.
     """
     with tarfile.open(fileobj=stream, mode="w|gz") as tar:
         # Add per-file exports
@@ -540,5 +880,11 @@ def _write_tar_to_stream(
         # Add RELATIONSHIPS.md
         data = rels_md.encode("utf-8")
         info = tarfile.TarInfo(name="RELATIONSHIPS.md")
+        info.size = len(data)
+        tar.addfile(info, io.BytesIO(data))
+
+        # Add ARCHITECTURE.md
+        data = arch_md.encode("utf-8")
+        info = tarfile.TarInfo(name="ARCHITECTURE.md")
         info.size = len(data)
         tar.addfile(info, io.BytesIO(data))

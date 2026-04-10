@@ -11,6 +11,7 @@ from glma.export import (
     generate_rule_summary,
     generate_index_md,
     generate_relationships_md,
+    generate_architecture_md,
     _format_export_file,
     _write_files_to_dir,
 )
@@ -186,22 +187,26 @@ class TestDirectoryOutput:
             "src/auth/login.py": "# login.py\n",
             "src/main.c": "# main.c\n",
         }
-        _write_files_to_dir(tmp_path, file_exports, "# Index", "# Rels")
+        _write_files_to_dir(tmp_path, file_exports, "# Index", "# Rels", "# Arch")
 
         assert (tmp_path / "src" / "auth" / "login.py.md").exists()
         assert (tmp_path / "src" / "main.c.md").exists()
         assert (tmp_path / "INDEX.md").exists()
         assert (tmp_path / "RELATIONSHIPS.md").exists()
+        assert (tmp_path / "ARCHITECTURE.md").exists()
 
     def test_file_content_correct(self, tmp_path):
         file_exports = {"test.py": "# Hello World\n"}
-        _write_files_to_dir(tmp_path, file_exports, "# Index", "# Rels")
+        _write_files_to_dir(tmp_path, file_exports, "# Index", "# Rels", "# Arch")
 
         content = (tmp_path / "test.py.md").read_text()
         assert "# Hello World" in content
 
         index_content = (tmp_path / "INDEX.md").read_text()
         assert "# Index" in index_content
+
+        arch_content = (tmp_path / "ARCHITECTURE.md").read_text()
+        assert "# Arch" in arch_content
 
 
 class TestExportCLI:
@@ -265,3 +270,185 @@ class TestChunkSummaryRendering:
         assert "**AI Chunk Summaries:**" in md
         assert "- **func_a**: Summary A" in md
         assert "- **func_b**: Summary B" in md
+
+
+def _make_arch_file_data() -> dict[str, dict]:
+    """Helper to create sample file_data for architecture tests."""
+    return {
+        "src/app/db/store.py": {
+            "chunks": [
+                _make_chunk("Database", ChunkType.CLASS, "src/app/db/store.py"),
+                _make_chunk("connect", file_path="src/app/db/store.py"),
+            ],
+            "relationships": [],
+            "summary": "Database connection manager.",
+            "record": None,
+        },
+        "src/app/db/migrate.py": {
+            "chunks": [
+                _make_chunk("run_migrations", file_path="src/app/db/migrate.py"),
+            ],
+            "relationships": [],
+            "summary": "Database migration runner.",
+            "record": None,
+        },
+        "src/app/cli.py": {
+            "chunks": [
+                _make_chunk("main", file_path="src/app/cli.py"),
+                _make_chunk("parse_args", file_path="src/app/cli.py"),
+            ],
+            "relationships": [
+                {
+                    "source_id": "src/app/cli.py::function::main::1",
+                    "source_name": "main",
+                    "rel_type": "imports",
+                    "target_name": "store",
+                    "target_id": "src/app/db/store.py::class::Database::1",
+                    "direction": "outgoing",
+                },
+            ],
+            "summary": "CLI entry point.",
+            "record": None,
+        },
+        "src/app/__main__.py": {
+            "chunks": [
+                Chunk(
+                    id="src/app/__main__.py::function::_run::1",
+                    file_path="src/app/__main__.py",
+                    chunk_type=ChunkType.FUNCTION,
+                    name="_run",
+                    content='if __name__ == "__main__": main()',
+                    summary=None,
+                    start_line=1,
+                    end_line=3,
+                    content_hash="main123",
+                    parent_id=None,
+                ),
+            ],
+            "relationships": [
+                {
+                    "source_id": "src/app/__main__.py::function::_run::1",
+                    "source_name": "_run",
+                    "rel_type": "imports",
+                    "target_name": "cli",
+                    "target_id": "src/app/cli.py::function::main::1",
+                    "direction": "outgoing",
+                },
+            ],
+            "summary": "Package entry point.",
+            "record": None,
+        },
+    }
+
+
+class TestGenerateArchitectureMd:
+    """Tests for generate_architecture_md."""
+
+    def test_basic_architecture_generation(self):
+        """All 4 sections present in generated output."""
+        file_data = _make_arch_file_data()
+        md = generate_architecture_md(file_data)
+
+        assert "# Architecture Overview" in md
+        assert "**Generated:**" in md
+        assert "**Total Modules:**" in md
+        assert "## Project Structure Overview" in md
+        assert "## Module Dependencies" in md
+        assert "## Entry Points" in md
+        assert "## Key Interfaces" in md
+
+    def test_entry_point_detection(self):
+        """Entry points detected via convention and fan-in."""
+        file_data = _make_arch_file_data()
+        md = generate_architecture_md(file_data)
+
+        # __main__.py is a convention-based entry point
+        assert "__main__.py" in md
+        assert "detected entry point" in md
+
+        # cli.py is detected by convention (filename)
+        assert "cli.py" in md
+
+    def test_module_grouping(self):
+        """Files grouped by directory into modules."""
+        file_data = {
+            "src/app/db/store.py": {
+                "chunks": [_make_chunk("Database", ChunkType.CLASS, "src/app/db/store.py")],
+                "relationships": [],
+                "summary": "DB store.",
+                "record": None,
+            },
+            "src/app/db/migrate.py": {
+                "chunks": [_make_chunk("run_migrations", file_path="src/app/db/migrate.py")],
+                "relationships": [],
+                "summary": "DB migrate.",
+                "record": None,
+            },
+            "src/app/api/routes.py": {
+                "chunks": [_make_chunk("Router", ChunkType.CLASS, "src/app/api/routes.py")],
+                "relationships": [],
+                "summary": "API routes.",
+                "record": None,
+            },
+            "src/app/api/auth.py": {
+                "chunks": [_make_chunk("authenticate", file_path="src/app/api/auth.py")],
+                "relationships": [],
+                "summary": "API auth.",
+                "record": None,
+            },
+        }
+        md = generate_architecture_md(file_data)
+
+        # Two module groupings: db and api
+        assert "### Module: db" in md
+        assert "### Module: api" in md
+        # Both db files under same module
+        assert "store.py" in md
+        assert "migrate.py" in md
+        # Both api files under same module
+        assert "routes.py" in md
+        assert "auth.py" in md
+
+    def test_chunk_summaries_used_in_narrative(self):
+        """AI chunk summaries appear in module narratives."""
+        chunk1 = _make_chunk("Database", ChunkType.CLASS, "src/app/db/store.py")
+        chunk1.summary = "Manages database connections and queries"
+        chunk2 = _make_chunk("connect", file_path="src/app/db/store.py")
+        chunk2.summary = "Establishes connection to the database"
+
+        file_data = {
+            "src/app/db/store.py": {
+                "chunks": [chunk1, chunk2],
+                "relationships": [],
+                "summary": "Database module.",
+                "record": None,
+            },
+        }
+        md = generate_architecture_md(file_data)
+
+        assert "Manages database connections" in md
+        assert "Establishes connection" in md
+
+    def test_single_file_codebase(self):
+        """Single file does not crash and produces valid output."""
+        file_data = {
+            "main.py": {
+                "chunks": [_make_chunk("main", file_path="main.py")],
+                "relationships": [],
+                "summary": "Entry point.",
+                "record": None,
+            },
+        }
+        md = generate_architecture_md(file_data)
+
+        assert "# Architecture Overview" in md
+        assert "**Total Modules:** 1" in md
+        assert "*(no external dependencies)*" in md
+
+    def test_architecture_md_in_directory_output(self, tmp_path):
+        """ARCHITECTURE.md is written to directory output."""
+        file_exports = {"test.py": "# Hello\n"}
+        _write_files_to_dir(tmp_path, file_exports, "# Index", "# Rels", "# Arch")
+
+        assert (tmp_path / "ARCHITECTURE.md").exists()
+        assert (tmp_path / "ARCHITECTURE.md").read_text() == "# Arch"
