@@ -110,3 +110,78 @@ def test_format_empty_chunks(sample_file_record):
     assert "# empty.py" in result
     assert "## Summary" in result
     assert "*(no top-level chunks found)*" in result
+
+
+class TestChunkSummaryInFormatter:
+    """Tests for AI chunk summary rendering in query output."""
+
+    def test_signature_block_shows_chunk_summary(self, sample_file_record):
+        """Signature block renders chunk summary blockquote."""
+        chunk = Chunk(
+            id="test.py::function::do_thing::1",
+            file_path="test.py",
+            chunk_type=ChunkType.FUNCTION,
+            name="do_thing",
+            content="def do_thing(): pass",
+            start_line=1,
+            end_line=1,
+            content_hash="hash1",
+            summary="Does the thing",
+        )
+        result = format_compact_output("test.py", sample_file_record, [chunk], {})
+        assert "> *Summary: Does the thing*" in result
+
+    def test_verbose_code_shows_chunk_summary(self, sample_file_record):
+        """Verbose mode renders chunk summary before code block."""
+        chunk = Chunk(
+            id="test.py::function::do_thing::1",
+            file_path="test.py",
+            chunk_type=ChunkType.FUNCTION,
+            name="do_thing",
+            content="def do_thing(): pass",
+            start_line=1,
+            end_line=1,
+            content_hash="hash1",
+            summary="Verbose summary",
+        )
+        result = format_compact_output(
+            "test.py", sample_file_record, [chunk], {}, verbose=True
+        )
+        assert "> *Summary: Verbose summary*" in result
+        assert "## Full Code" in result
+
+    def test_json_output_includes_summary(self, sample_file_record):
+        """JSON output includes summary field."""
+        import json
+        from glma.query.formatter import format_json_output
+
+        chunk = Chunk(
+            id="test.py::function::do_thing::1",
+            file_path="test.py",
+            chunk_type=ChunkType.FUNCTION,
+            name="do_thing",
+            content="def do_thing(): pass",
+            start_line=1,
+            end_line=1,
+            content_hash="hash1",
+            summary="JSON summary",
+        )
+        output = format_json_output("test.py", sample_file_record, [chunk], [])
+        data = json.loads(output)
+        assert data["chunks"][0]["summary"] == "JSON summary"
+
+    def test_no_summary_no_extra_output(self, sample_file_record):
+        """Chunks without summary don't produce summary-related output."""
+        chunk = Chunk(
+            id="test.py::function::do_thing::1",
+            file_path="test.py",
+            chunk_type=ChunkType.FUNCTION,
+            name="do_thing",
+            content="def do_thing(): pass",
+            start_line=1,
+            end_line=1,
+            content_hash="hash1",
+        )
+        result = format_compact_output("test.py", sample_file_record, [chunk], {})
+        assert "Summary:" not in result
+        assert "> *Summary:" not in result

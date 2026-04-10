@@ -224,3 +224,44 @@ class TestExportCLI:
         runner = CliRunner()
         result = runner.invoke(app, ["--help"])
         assert "export" in result.output.lower()
+
+
+class TestChunkSummaryRendering:
+    """Tests for AI chunk summary rendering in export output."""
+
+    def test_chunk_summary_rendered_in_export(self):
+        """Chunks with summary show blockquote when code is omitted."""
+        chunk = _make_chunk("my_func")
+        chunk.summary = "AI-generated summary of this chunk"
+        config = ExportConfig(include_code=False)
+        md = _format_export_file("src/test.py", None, [chunk], [], config)
+        assert "> *Summary: AI-generated summary of this chunk*" in md
+        assert "*(Code omitted" not in md
+
+    def test_chunk_summary_with_code_included(self):
+        """Chunks with summary AND code both appear."""
+        chunk = _make_chunk("my_func")
+        chunk.summary = "Test summary"
+        config = ExportConfig(include_code=True)
+        md = _format_export_file("src/test.py", None, [chunk], [], config)
+        assert "> *Summary: Test summary*" in md
+        assert "```python" in md
+
+    def test_chunk_without_summary_shows_omitted(self):
+        """Chunks without summary show code omitted when include_code=False."""
+        chunk = _make_chunk("my_func")
+        config = ExportConfig(include_code=False)
+        md = _format_export_file("src/test.py", None, [chunk], [], config)
+        assert "*(Code omitted" in md
+
+    def test_ai_summaries_shows_chunk_overview(self):
+        """ai_summaries=True shows AI Chunk Summaries section for chunks with summaries."""
+        chunk1 = _make_chunk("func_a")
+        chunk1.summary = "Summary A"
+        chunk2 = _make_chunk("func_b")
+        chunk2.summary = "Summary B"
+        config = ExportConfig(ai_summaries=True)
+        md = _format_export_file("src/test.py", None, [chunk1, chunk2], [], config)
+        assert "**AI Chunk Summaries:**" in md
+        assert "- **func_a**: Summary A" in md
+        assert "- **func_b**: Summary B" in md

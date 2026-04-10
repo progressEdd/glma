@@ -302,6 +302,11 @@ def format_file_markdown(
         lines.append(_format_chunk_heading(chunk))
         lines.append("")
 
+        # AI-generated chunk summary (from DB)
+        if chunk.summary:
+            lines.append(f"> *Summary: {chunk.summary}*")
+            lines.append("")
+
         # Show attached comments above the code block
         if chunk.attached_comments:
             for comment in chunk.attached_comments:

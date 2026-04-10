@@ -72,6 +72,11 @@ def _format_signature_block(chunk: Chunk, chunk_rels: dict, query_config: Option
             lines.append(f"*{comment}*")
             lines.append("")
 
+    # AI-generated chunk summary (from DB)
+    if chunk.summary:
+        lines.append(f"> *Summary: {chunk.summary}*")
+        lines.append("")
+
     # Skip relationships if no_relationships is set
     if query_config and query_config.no_relationships:
         return lines
@@ -126,6 +131,10 @@ def _format_verbose_code(chunks: list[Chunk], file_path: str) -> list[str]:
     for chunk in chunks:
         lines.append(f"### {chunk.name}")
         lines.append("")
+        # AI-generated chunk summary (from DB)
+        if chunk.summary:
+            lines.append(f"> *Summary: {chunk.summary}*")
+            lines.append("")
         lines.append(f"```{lang}")
         lines.append(chunk.content)
         lines.append("```")
@@ -251,6 +260,7 @@ def format_json_output(
                 "start_line": chunk.start_line,
                 "end_line": chunk.end_line,
                 "docstring": chunk.attached_comments[0] if chunk.attached_comments else None,
+                "summary": chunk.summary,
                 "content": chunk.content if verbose else None,
             }
             for chunk in chunks

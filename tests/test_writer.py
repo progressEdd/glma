@@ -123,3 +123,42 @@ class TestWriteMarkdown:
     def test_write_empty_chunks_raises(self, tmp_path):
         with pytest.raises(ValueError, match="No chunks"):
             write_markdown([], tmp_path, ".glma-index")
+
+
+class TestChunkSummaryInWriter:
+    """Tests for AI chunk summary rendering in writer output."""
+
+    def test_writer_renders_chunk_summary(self, tmp_path):
+        """Writer renders chunk summary blockquote."""
+        from glma.models import Chunk, ChunkType
+
+        chunk = Chunk(
+            id="test.py::function::hello::1",
+            file_path="test.py",
+            chunk_type=ChunkType.FUNCTION,
+            name="hello",
+            content="def hello(): pass",
+            start_line=1,
+            end_line=1,
+            content_hash="hash1",
+            summary="Written summary",
+        )
+        md = format_file_markdown("test.py", [chunk])
+        assert "> *Summary: Written summary*" in md
+
+    def test_writer_no_summary_no_extra_output(self, tmp_path):
+        """Chunks without summary don't produce summary-related output."""
+        from glma.models import Chunk, ChunkType
+
+        chunk = Chunk(
+            id="test.py::function::hello::1",
+            file_path="test.py",
+            chunk_type=ChunkType.FUNCTION,
+            name="hello",
+            content="def hello(): pass",
+            start_line=1,
+            end_line=1,
+            content_hash="hash1",
+        )
+        md = format_file_markdown("test.py", [chunk])
+        assert "> *Summary:" not in md
