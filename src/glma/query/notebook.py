@@ -5,13 +5,81 @@ tracks cross-cell variable flow, generates rule-based section summaries, and out
 compacted markdown.
 """
 
+from __future__ import annotations
+
+import hashlib
+import json
 import re
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 import nbformat
 
 from glma.query.variables import CellVariableInfo, extract_cell_variables, build_variable_flow
+
+if TYPE_CHECKING:
+    from glma.summarize.providers import SummarizerProvider
+
+
+@dataclass
+class CachedCell:
+    """A cached cell summary entry."""
+    index: int
+    content_hash: str
+    summary: str
+
+
+def _cell_content_hash(source: str) -> str:
+    """Compute BLAKE2b hash of cell source content."""
+    return hashlib.blake2b(source.encode("utf-8"), digest_size=32).hexdigest()
+
+
+def _notebook_file_hash(filepath: Path) -> str:
+    """Compute BLAKE2b hash of the notebook file contents."""
+    content = filepath.read_bytes()
+    return hashlib.blake2b(content, digest_size=32).hexdigest()
+
+
+def _load_cache(cache_dir: Path, notebook_path: Path) -> dict[int, tuple[str, str]]:
+    """Load cached cell summaries from disk.
+
+    Returns dict mapping cell_index → (content_hash, summary).
+    Returns empty dict if cache doesn't exist or is malformed.
+    """
+    file_hash = _notebook_file_hash(notebook_path)
+    cache_file = cache_dir / f"{notebook_path.stem}-{file_hash}.json"
+    if not cache_file.exists():
+        return {}
+    try:
+        data = json.loads(cache_file.read_text("utf-8"))
+        result = {}
+        for cell_entry in data.get("cells", []):
+            idx = cell_entry.get("index", -1)
+            chash = cell_entry.get("content_hash", "")
+            summary = cell_entry.get("summary", "")
+            if idx >= 0 and chash and summary:
+                result[idx] = (chash, summary)
+        return result
+    except (json.JSONDecodeError, KeyError, TypeError):
+        return {}
+
+
+def _save_cache(cache_dir: Path, notebook_path: Path, cells: list[CachedCell]) -> None:
+    """Save cell summaries to disk.
+
+    Creates cache_dir if it doesn't exist. Overwrites any existing cache file.
+    """
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    file_hash = _notebook_file_hash(notebook_path)
+    cache_file = cache_dir / f"{notebook_path.stem}-{file_hash}.json"
+    data = {
+        "cells": [
+            {"index": c.index, "content_hash": c.content_hash, "summary": c.summary}
+            for c in cells
+        ]
+    }
+    cache_file.write_text(json.dumps(data, indent=2), encoding="utf-8")
 
 
 def _extract_heading(source: str) -> tuple[int, str] | None:
@@ -183,6 +251,7 @@ def _format_cell(
     include_outputs: bool,
     outputs: list,
     include_code: bool = True,
+    summary: str | None = None,
 ) -> list[str]:
     """Format a single cell's markdown output."""
     lines: list[str] = []
@@ -199,6 +268,11 @@ def _format_cell(
     # Code cell
     lines.append(f"### Cell {index} [code]")
     lines.append("")
+
+    # AI-generated summary blockquote
+    if summary:
+        lines.append(f"> *Summary: {summary}*")
+        lines.append("")
 
     if include_code:
         lines.append("```python")
@@ -276,7 +350,13 @@ def _format_cell(
     return lines
 
 
-def compact_notebook(filepath: str | Path, include_outputs: bool = False, include_code: bool = False) -> str:
+def compact_notebook(
+    filepath: str | Path,
+    include_outputs: bool = False,
+    include_code: bool = False,
+    provider: SummarizerProvider | None = None,
+    cache_dir: Path | None = None,
+) -> str:
     """Compact a Jupyter notebook into layered markdown.
 
     Args:
@@ -284,6 +364,8 @@ def compact_notebook(filepath: str | Path, include_outputs: bool = False, includ
         include_outputs: If True, include cell outputs in the output.
         include_code: If True, include full source code. If False, show only
             first line + line count per cell (summary mode).
+        provider: Optional SummarizerProvider for AI cell summaries.
+        cache_dir: Optional directory for caching cell summaries.
 
     Returns:
         Compacted markdown string.
@@ -323,6 +405,52 @@ def compact_notebook(filepath: str | Path, include_outputs: bool = False, includ
     # Group into sections
     sections = _group_sections(cell_data_list)
 
+    # Load cache and summarize cells if provider is available
+    cell_summaries: dict[int, str] = {}
+    if provider is not None and cache_dir is not None:
+        cached = _load_cache(cache_dir, filepath)
+        cache_updates: list[CachedCell] = []
+
+        for index, cell in enumerate(nb.cells):
+            if cell.cell_type != "code":
+                continue
+            # Skip trivial cells (< 3 non-empty lines)
+            non_empty_lines = [ln for ln in cell.source.splitlines() if ln.strip()]
+            if len(non_empty_lines) < 3:
+                continue
+
+            content_hash = _cell_content_hash(cell.source)
+
+            # Check cache
+            if index in cached and cached[index][0] == content_hash:
+                cell_summaries[index] = cached[index][1]
+                cache_updates.append(CachedCell(index=index, content_hash=content_hash, summary=cached[index][1]))
+                continue
+
+            # Summarize via provider
+            try:
+                # Find section heading for this cell
+                section_name = "Preamble"
+                for sec in sections:
+                    if index in sec["cell_indices"]:
+                        section_name = sec["title"]
+                        break
+                context = (
+                    f"Notebook: {filepath.name}\n"
+                    f"Cell: {index} [code]\n"
+                    f"Section: \"{section_name}\""
+                )
+                summary = provider.summarize(cell.source, context)
+                if summary:
+                    cell_summaries[index] = summary
+                    cache_updates.append(CachedCell(index=index, content_hash=content_hash, summary=summary))
+            except Exception:
+                pass  # Fail open — no summary for this cell
+
+        # Persist cache
+        if cache_updates:
+            _save_cache(cache_dir, filepath, cache_updates)
+
     # Build output
     lines: list[str] = []
     lines.append(f"# {filepath.name}")
@@ -346,7 +474,11 @@ def compact_notebook(filepath: str | Path, include_outputs: bool = False, includ
     for index, cell in enumerate(nb.cells):
         cell_info = cell_infos[index]
         outputs = cell.get("outputs", []) if cell.cell_type == "code" else []
-        cell_lines = _format_cell(index, cell_info, flow, include_outputs, outputs, include_code=include_code)
+        cell_lines = _format_cell(
+            index, cell_info, flow, include_outputs, outputs,
+            include_code=include_code,
+            summary=cell_summaries.get(index),
+        )
         lines.extend(cell_lines)
 
     # Variable Flow table
