@@ -97,7 +97,7 @@ def comprehension_notebook(tmp_path):
 
 def test_comprehension_source_preserved(comprehension_notebook):
     """List/dict/set comprehensions appear in full in cell source output."""
-    result = compact_notebook(comprehension_notebook)
+    result = compact_notebook(comprehension_notebook, include_code=True)
     # List comprehension — full expression must appear
     assert "[x * 2 for x in range(10) if x > 3]" in result
     # Dict comprehension — full expression must appear
@@ -117,3 +117,20 @@ def test_comprehension_variable_tracking(comprehension_notebook):
     assert "mapping" in result
     assert "unique" in result
     assert "matrix" in result
+
+
+def test_code_hidden_by_default(simple_notebook):
+    """Code blocks are hidden by default in compacted output."""
+    result = compact_notebook(simple_notebook)
+    # Should NOT contain a full code block with the source
+    assert "```python" not in result
+    # The first-line preview is OK — just no full code blocks
+    # Should still contain cell annotations
+    assert "### Cell 0 [code]" in result
+
+
+def test_code_shown_when_requested(simple_notebook):
+    """Code blocks appear when include_code=True."""
+    result = compact_notebook(simple_notebook, include_code=True)
+    assert "```python" in result
+    assert "x = 42" in result

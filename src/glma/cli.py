@@ -178,6 +178,7 @@ def query(
     output: Optional[str] = typer.Option(None, "--output", "-o", help="Output file path (default: stdout)."),
     repo_root: Optional[Path] = typer.Option(None, "--repo", "-r", help="Repo root directory (auto-detected)."),
     include_outputs: bool = typer.Option(False, "--include-outputs", help="Include notebook cell outputs."),
+    include_code: bool = typer.Option(False, "--include-code", help="Include full source code in notebook output (default: summary only)."),
 ) -> None:
     """Query an indexed file and output compacted markdown."""
     # Validate flags
@@ -211,7 +212,7 @@ def query(
             sys.stderr.write(f"Error: File not found: {filepath}\n")
             raise typer.Exit(1)
         from glma.query.notebook import compact_notebook
-        result_text = compact_notebook(disk_path, include_outputs=include_outputs, include_code=not summary_only)
+        result_text = compact_notebook(disk_path, include_outputs=include_outputs, include_code=include_code)
         _write_output(result_text, output)
         return
 

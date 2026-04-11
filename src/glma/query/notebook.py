@@ -1,15 +1,157 @@
 """Jupyter notebook compaction to compacted markdown.
 
 Parses .ipynb files with nbformat, extracts per-statement variable definitions/references,
-tracks cross-cell variable flow, and generates compacted markdown output.
+tracks cross-cell variable flow, generates rule-based section summaries, and outputs
+compacted markdown.
 """
 
+import re
 from pathlib import Path
 from typing import Optional
 
 import nbformat
 
 from glma.query.variables import CellVariableInfo, extract_cell_variables, build_variable_flow
+
+
+def _extract_heading(source: str) -> tuple[int, str] | None:
+    """Extract the highest-level heading from markdown source.
+
+    Returns (level, text) or None if no heading found.
+    """
+    for line in source.split("\n"):
+        m = re.match(r'^(#{1,6})\s+(.+)$', line)
+        if m:
+            return (len(m.group(1)), m.group(2).strip())
+    return None
+
+
+def _group_sections(cells: list[dict]) -> list[dict]:
+    """Group cells into sections based on markdown headings.
+
+    A markdown cell with a heading starts a new section. Code cells and
+    markdown cells without headings belong to the current section.
+
+    Returns a list of sections, each with:
+        - title: str (heading text)
+        - level: int (heading level 1-6)
+        - start_cell: int (first cell index in section)
+        - end_cell: int (last cell index in section, inclusive)
+        - cell_indices: list[int]
+    """
+    sections: list[dict] = []
+    current: dict | None = None
+
+    for cell_data in cells:
+        idx = cell_data["index"]
+        cell_type = cell_data["cell_type"]
+        source = cell_data["source"]
+
+        if cell_type == "markdown":
+            heading = _extract_heading(source)
+            if heading:
+                # Flush previous section
+                if current is not None:
+                    sections.append(current)
+                current = {
+                    "title": heading[1],
+                    "level": heading[0],
+                    "start_cell": idx,
+                    "end_cell": idx,
+                    "cell_indices": [idx],
+                }
+                continue
+
+        # Add to current section (or create an untitled one)
+        if current is None:
+            current = {
+                "title": "Preamble",
+                "level": 1,
+                "start_cell": idx,
+                "end_cell": idx,
+                "cell_indices": [idx],
+            }
+        else:
+            current["cell_indices"].append(idx)
+            current["end_cell"] = idx
+
+    if current is not None:
+        sections.append(current)
+
+    return sections
+
+
+def _generate_section_summary(
+    section: dict,
+    cell_infos: list[CellVariableInfo],
+    flow: dict,
+) -> str:
+    """Generate a rule-based summary for a notebook section.
+
+    Summarizes what the section's code cells do by examining imports,
+    function/class definitions, and key variable assignments.
+
+    Args:
+        section: Section dict from _group_sections.
+        cell_infos: All cell variable info objects.
+        flow: Cross-cell variable flow dict.
+
+    Returns:
+        1-2 sentence summary string.
+    """
+    parts: list[str] = []
+    imports: list[str] = []
+    functions: list[str] = []
+    classes: list[str] = []
+    key_vars: list[str] = []
+
+    for idx in section["cell_indices"]:
+        info = cell_infos[idx]
+        if info.cell_type != "code":
+            continue
+        for stmt in info.statements:
+            if stmt.statement_type == "import":
+                imports.extend(stmt.defines)
+            elif stmt.statement_type == "function_def":
+                functions.extend(stmt.defines)
+            elif stmt.statement_type == "class_def":
+                classes.extend(stmt.defines)
+            elif stmt.statement_type == "assign" and stmt.defines:
+                # Only track variables that are referenced in other cells
+                for var in stmt.defines:
+                    if var in flow:
+                        used_in_cells = flow[var].get("used_in", [])
+                        if used_in_cells:
+                            used_cells = {u["cell"] for u in used_in_cells}
+                            if used_cells - {idx}:
+                                key_vars.append(var)
+
+    if imports:
+        unique_imports = list(dict.fromkeys(imports))[:8]
+        suffix = f" +{len(imports) - len(unique_imports)} more" if len(imports) > 8 else ""
+        parts.append(f"imports {', '.join(unique_imports)}{suffix}")
+
+    if functions:
+        unique_funcs = list(dict.fromkeys(functions))[:6]
+        suffix = f" +{len(functions) - len(unique_funcs)} more" if len(functions) > 6 else ""
+        parts.append(f"defines functions: {', '.join(unique_funcs)}{suffix}")
+
+    if classes:
+        unique_classes = list(dict.fromkeys(classes))[:6]
+        parts.append(f"defines classes: {', '.join(unique_classes)}")
+
+    if key_vars:
+        unique_vars = list(dict.fromkeys(key_vars))[:8]
+        parts.append(f"produces key variables: {', '.join(unique_vars)}")
+
+    if not parts:
+        n_code = sum(1 for i in section["cell_indices"] if cell_infos[i].cell_type == "code")
+        n_md = sum(1 for i in section["cell_indices"] if cell_infos[i].cell_type == "markdown")
+        if n_code == 0:
+            return f"Markdown section with {n_md} cell(s)."
+        return f"Section with {n_code} code cell(s)."
+
+    return ". ".join(parts) + "."
 
 
 def _format_variable_flow_table(flow: dict) -> list[str]:
@@ -134,7 +276,7 @@ def _format_cell(
     return lines
 
 
-def compact_notebook(filepath: str | Path, include_outputs: bool = False, include_code: bool = True) -> str:
+def compact_notebook(filepath: str | Path, include_outputs: bool = False, include_code: bool = False) -> str:
     """Compact a Jupyter notebook into layered markdown.
 
     Args:
@@ -169,11 +311,33 @@ def compact_notebook(filepath: str | Path, include_outputs: bool = False, includ
     code_cells = sum(1 for c in nb.cells if c.cell_type == "code")
     md_cells = len(nb.cells) - code_cells
 
+    # Build cell data for section grouping
+    cell_data_list: list[dict] = []
+    for index, cell in enumerate(nb.cells):
+        cell_data_list.append({
+            "index": index,
+            "cell_type": cell.cell_type,
+            "source": cell.source if cell.cell_type == "markdown" else "",
+        })
+
+    # Group into sections
+    sections = _group_sections(cell_data_list)
+
     # Build output
     lines: list[str] = []
     lines.append(f"# {filepath.name}")
     lines.append(f"*Notebook: {filepath.name} | {len(nb.cells)} cells ({code_cells} code, {md_cells} markdown)*")
     lines.append("")
+
+    # Sections overview
+    if sections:
+        lines.append("## Sections")
+        lines.append("")
+        for sec in sections:
+            n_cells = len(sec["cell_indices"])
+            summary = _generate_section_summary(sec, cell_infos, flow)
+            lines.append(f"- **{sec['title']}** (cells {sec['start_cell']}–{sec['end_cell']}, {n_cells} cells): {summary}")
+        lines.append("")
 
     # Cells section
     lines.append("## Cells")
