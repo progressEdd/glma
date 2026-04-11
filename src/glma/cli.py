@@ -179,6 +179,21 @@ def query(
     repo_root: Optional[Path] = typer.Option(None, "--repo", "-r", help="Repo root directory (auto-detected)."),
     include_outputs: bool = typer.Option(False, "--include-outputs", help="Include notebook cell outputs."),
     include_code: bool = typer.Option(False, "--include-code", help="Include full source code in notebook output (default: summary only)."),
+    summarize: bool = typer.Option(
+        False,
+        "--summarize",
+        help="Generate per-cell AI summaries for notebook queries.",
+    ),
+    summarize_provider: Optional[str] = typer.Option(
+        None,
+        "--summarize-provider",
+        help="Summarization provider: 'local' (OpenAI-compatible) or 'pi'.",
+    ),
+    summarize_model: Optional[str] = typer.Option(
+        None,
+        "--summarize-model",
+        help="Model name for summarization (e.g., 'llama3', 'codellama').",
+    ),
 ) -> None:
     """Query an indexed file and output compacted markdown."""
     # Validate flags
@@ -211,8 +226,44 @@ def query(
         if not disk_path.exists():
             sys.stderr.write(f"Error: File not found: {filepath}\n")
             raise typer.Exit(1)
+
+        # Summarization setup for notebooks
+        nb_provider = None
+        nb_cache_dir = None
+        if summarize:
+            from glma.config import load_summarize_config
+            from glma.summarize.providers import OpenAICompatibleProvider, PiProvider
+
+            summarize_overrides = {"enabled": True}
+            if summarize_provider:
+                summarize_overrides["provider"] = summarize_provider
+            if summarize_model:
+                summarize_overrides["model"] = summarize_model
+
+            summ_cfg = load_summarize_config(repo_root_path, summarize_overrides)
+
+            try:
+                if summ_cfg.provider.value == "pi":
+                    nb_provider = PiProvider(model=summ_cfg.model)
+                else:
+                    nb_provider = OpenAICompatibleProvider(
+                        base_url=summ_cfg.base_url,
+                        model=summ_cfg.model,
+                    )
+            except ImportError as e:
+                console.print(f"[red]Error:[/red] {e}")
+                raise typer.Exit(1)
+
+            nb_cache_dir = repo_root_path / ".glma-index" / "notebook-cache"
+
         from glma.query.notebook import compact_notebook
-        result_text = compact_notebook(disk_path, include_outputs=include_outputs, include_code=include_code)
+        result_text = compact_notebook(
+            disk_path,
+            include_outputs=include_outputs,
+            include_code=include_code,
+            provider=nb_provider,
+            cache_dir=nb_cache_dir,
+        )
         _write_output(result_text, output)
         return
 
