@@ -28,7 +28,13 @@ Requirements for Polish & Complete milestone. Each maps to roadmap phases.
 
 ### Export Enhancement
 
-- [ ] **ARCH-01**: ARCHITECTURE.md generated from relationship + summary data and included in exports
+- [x] **ARCH-01**: ARCHITECTURE.md generated from relationship + summary data and included in exports ✓ Phase 8
+
+### Notebook Summarization
+
+- [x] **NSUMM-01**: `glma query notebook.ipynb --summarize` generates per-cell AI summaries shown in compacted markdown ✓ Phase 9
+- [x] **NSUMM-02**: Summaries cached in `.glma-index/notebook-cache/` keyed on cell content hash — unchanged cells not re-summarized ✓ Phase 9
+- [x] **NSUMM-03**: `--summarize-provider` and `--summarize-model` flags work for notebook queries (reuse existing provider config) ✓ Phase 9
 
 ## v2 Requirements
 
@@ -85,13 +91,17 @@ Which phases cover which requirements. Updated during roadmap creation.
 | PROV-02 | Phase 7 | Complete |
 | PROV-03 | Phase 7 | Complete |
 | PROV-04 | Phase 7 | Complete |
-| ARCH-01 | Phase 8 | Pending |
+| ARCH-01 | Phase 8 | Complete |
+| NSUMM-01 | Phase 9 | Complete |
+| NSUMM-02 | Phase 9 | Complete |
+| NSUMM-03 | Phase 9 | Complete |
 
 **Coverage:**
 - v1.1 requirements: 11 total
-- Mapped to phases: 11
+- v1.2 requirements: 3 total
+- Mapped to phases: 14
 - Unmapped: 0 ✓
 
 ---
 *Requirements defined: 2026-04-10*
-*Last updated: 2026-04-10 after v1.1 milestone definition*
+*Last updated: 2026-04-11 after v1.2 milestone definition*

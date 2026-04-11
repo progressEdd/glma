@@ -1,17 +1,17 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.2
+milestone: v1.1
 milestone_name: milestone
-status: planned
-stopped_at: Phase 9 planned (2 plans, 2 waves)
-last_updated: "2026-04-11T01:30:00.000Z"
-last_activity: 2026-04-11 - Phase 9 planned
+status: completed
+stopped_at: Milestone v1.1 complete — all phases shipped
+last_updated: "2026-04-11T00:28:32.928Z"
+last_activity: 2026-04-11 - Phase 9 complete
 progress:
   total_phases: 5
-  completed_phases: 4
-  total_plans: 8
-  completed_plans: 7
-  percent: 0
+  completed_phases: 5
+  total_plans: 7
+  completed_plans: 9
+  percent: 100
 ---
 
 # Project State
@@ -21,25 +21,27 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-10)
 
 **Core value:** Agents can call a single command and get exactly the code context they need to implement features — no grepping, no raw file parsing, no guesswork.
-**Current focus:** v1.2 Notebook Cell Summarization
+**Current focus:** v1.1 complete — all phases shipped
 
 ## Current Position
 
-Phase: 09 of 09 (notebook cell summarization)
-Plan: 2/2
-Status: Planned
-Last activity: 2026-04-11 - Phase 9 planned
+Phase: 09 of 5 (notebook cell summarization)
+Plan: 2 of 2
+Status: Milestone complete
+Last activity: 2026-04-11 - Phase 9 complete
 
-Progress: [████████░░] 80% (planned)
+Progress: [██████████] 100% (complete)
 
 ## v1.1 Summary
 
-**Shipped:** 4 phases (5-8), 7 plans, 257 tests
+**Shipped:** 5 phases (5-9), 9 plans, 270 tests
 **Phases:**
+
 - Phase 5: Bug Fixes (export defaults, notebook truncation, stale placeholder)
 - Phase 6: Summarization Infrastructure (provider protocol, DB update, pipeline)
 - Phase 7: CLI Integration & Providers (OpenAI-compatible, pi provider, CLI flags)
 - Phase 8: ARCHITECTURE.md & Export Polish (architecture overview, export integration)
+- Phase 9: Notebook Cell Summarization (cell cache, provider integration, CLI flags)
 
 ## Performance Metrics
 
@@ -72,13 +74,15 @@ Key decisions from v1.0 carried forward:
 - Rule-based summaries by default, AI optional
 - Three export modes: directory, tar.gz, stdout
 
-### Pending Todos
+### Resolved Todos
 
-See `.planning/todos/pending/`:
+- **Notebook cell AI summarization** — resolved in Phase 9 (NotebookCache + provider integration)
+- **Generate codebase architecture summary file** — resolved in Phase 8
 
-1. **Notebook cell AI summarization** — notebooks bypass LadybugStore, cells never get LLM summaries
-2. **Pi/agent integration for summarization** — full pi extension with model_hint resolution not built
-3. **Generate codebase architecture summary file** — completed (Phase 8), todo can be resolved
+### Remaining (v2)
+
+- **Pi/agent integration for summarization** — full pi extension with model_hint resolution not built
+- **C duplicate chunk IDs** — deferred to v2
 
 ### Open Debug Items
 
@@ -91,5 +95,5 @@ See `.planning/todos/pending/`:
 ## Session Continuity
 
 Last session: 2026-04-11
-Stopped at: Phase 9 planned (2 plans, 2 waves)
-Resume file: .planning/phases/09-notebook-cell-summarization/09-01-PLAN.md
+Stopped at: Milestone v1.1 complete — all phases shipped
+Resume file: N/A — milestone complete

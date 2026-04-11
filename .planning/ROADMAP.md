@@ -13,7 +13,7 @@ Close all v1.0 gaps — fix known bugs, complete unfinished features, and ship p
 - [x] **Phase 5: Bug Fixes** - Fix export default, notebook truncation, stale placeholder
 - [x] **Phase 6: Summarization Infrastructure** - Provider protocol, DB update method, summarization pipeline
 - [x] **Phase 7: CLI Integration & Providers** - Wire up CLI flags, implement OpenAI-compatible and pi providers
-- [ ] **Phase 9: Notebook Cell Summarization** - Wire LLM summarization into notebook query path with cell-level caching
+- [x] **Phase 9: Notebook Cell Summarization** - Wire LLM summarization into notebook query path with cell-level caching
 
 ## Phase Details
 
@@ -82,4 +82,4 @@ Phases execute in numeric order: 5 → 6 → 7 → 8
 | 6. Summarization Infrastructure | 1/1 | Complete | 2026-04-10 |
 | 7. CLI Integration & Providers | 3/3 | Complete | 2026-04-10 |
 | 8. ARCHITECTURE.md & Export Polish | 1/1 | Complete | 2026-04-10 |
-| 9. Notebook Cell Summarization | 2/2 | Planned | - |
+| 9. Notebook Cell Summarization | 2/2 | Complete | 2026-04-11 |
