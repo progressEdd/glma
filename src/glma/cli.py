@@ -145,7 +145,7 @@ def _write_output(text: str, output_path: Optional[str]) -> None:
     if output_path:
         Path(output_path).write_text(text, encoding="utf-8")
     else:
-        console.print(text, highlight=False, soft_wrap=True)
+        console.print(text, highlight=False, soft_wrap=True, markup=False)
 
 
 def _group_rels_by_chunk(rels: list[dict], chunk_ids: list[str]) -> dict:
