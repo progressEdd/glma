@@ -134,3 +134,194 @@ def test_code_shown_when_requested(simple_notebook):
     result = compact_notebook(simple_notebook, include_code=True)
     assert "```python" in result
     assert "x = 42" in result
+
+
+# --- Summarization & Cache Tests ---
+
+
+class MockNotebookProvider:
+    """Mock SummarizerProvider for notebook tests."""
+
+    def __init__(self, response_prefix="AI summary for cell"):
+        self.calls: list[tuple[str, str]] = []
+        self.response_prefix = response_prefix
+
+    def summarize(self, code: str, context: str) -> str:
+        self.calls.append((code, context))
+        return f"{self.response_prefix}: {context.splitlines()[1] if len(context.splitlines()) > 1 else 'unknown'}"
+
+
+class FailingNotebookProvider:
+    """Provider that always raises."""
+
+    def summarize(self, code: str, context: str) -> str:
+        raise RuntimeError("Provider unavailable")
+
+
+def test_cell_content_hash():
+    """Cell content hash is deterministic BLAKE2b hex string."""
+    from glma.query.notebook import _cell_content_hash
+    h1 = _cell_content_hash("x = 42")
+    h2 = _cell_content_hash("x = 42")
+    h3 = _cell_content_hash("y = 99")
+    assert h1 == h2
+    assert h1 != h3
+    assert len(h1) == 64  # BLAKE2b digest_size=32 → 64 hex chars
+
+
+def test_cache_roundtrip(tmp_path):
+    """Cache save and load preserves cell summaries."""
+    from glma.query.notebook import _save_cache, _load_cache, CachedCell
+    nb_path = tmp_path / "test.ipynb"
+    nb_path.write_text('{"cells":[]}', encoding="utf-8")
+    cache_dir = tmp_path / "cache"
+
+    cells = [
+        CachedCell(index=0, content_hash="abc", summary="First cell summary"),
+        CachedCell(index=2, content_hash="def", summary="Third cell summary"),
+    ]
+    _save_cache(cache_dir, nb_path, cells)
+
+    loaded = _load_cache(cache_dir, nb_path)
+    assert 0 in loaded
+    assert loaded[0] == ("abc", "First cell summary")
+    assert 2 in loaded
+    assert loaded[2] == ("def", "Third cell summary")
+    assert 1 not in loaded
+
+
+def test_cache_empty_when_missing(tmp_path):
+    """Loading cache from nonexistent path returns empty dict."""
+    from glma.query.notebook import _load_cache
+    nb_path = tmp_path / "ghost.ipynb"
+    nb_path.write_text('{}', encoding="utf-8")
+    loaded = _load_cache(tmp_path / "nope", nb_path)
+    assert loaded == {}
+
+
+def test_summarize_appears_in_output(tmp_path):
+    """Summarized cells show blockquote summary in output."""
+    nb = nbformat.v4.new_notebook()
+    nb.cells = [
+        nbformat.v4.new_code_cell("x = 42\ny = x + 1\nz = y * 2"),
+        nbformat.v4.new_code_cell("a = 1\nb = 2\nc = a + b"),
+    ]
+    path = tmp_path / "summ.ipynb"
+    nbformat.write(nb, str(path))
+
+    provider = MockNotebookProvider()
+    cache_dir = tmp_path / "cache"
+    result = compact_notebook(path, provider=provider, cache_dir=cache_dir)
+
+    assert "> *Summary:" in result
+    assert len(provider.calls) == 2  # Both cells ≥ 3 lines
+
+
+def test_summarize_skips_trivial_cells(tmp_path):
+    """Cells with < 3 non-empty lines are not summarized."""
+    nb = nbformat.v4.new_notebook()
+    nb.cells = [
+        nbformat.v4.new_code_cell("x = 42"),  # 1 line — skip
+        nbformat.v4.new_code_cell("a = 1\nb = 2\nc = a + b"),  # 3 lines — summarize
+    ]
+    path = tmp_path / "trivial.ipynb"
+    nbformat.write(nb, str(path))
+
+    provider = MockNotebookProvider()
+    cache_dir = tmp_path / "cache"
+    result = compact_notebook(path, provider=provider, cache_dir=cache_dir)
+
+    assert len(provider.calls) == 1  # Only the 3-line cell
+    assert "> *Summary:" in result
+
+
+def test_summarize_skips_markdown_cells(tmp_path):
+    """Markdown cells are never summarized even with provider."""
+    nb = nbformat.v4.new_notebook()
+    nb.cells = [
+        nbformat.v4.new_markdown_cell("# Introduction\nThis is a long intro\nwith multiple lines"),
+    ]
+    path = tmp_path / "md.ipynb"
+    nbformat.write(nb, str(path))
+
+    provider = MockNotebookProvider()
+    cache_dir = tmp_path / "cache"
+    result = compact_notebook(path, provider=provider, cache_dir=cache_dir)
+
+    assert len(provider.calls) == 0  # No code cells
+    assert "> *Summary:" not in result
+
+
+def test_summarize_cache_avoids_duplicate_calls(tmp_path):
+    """Cached cells are not re-summarized."""
+    nb = nbformat.v4.new_notebook()
+    nb.cells = [
+        nbformat.v4.new_code_cell("x = 42\ny = x + 1\nz = y * 2"),
+    ]
+    path = tmp_path / "cached.ipynb"
+    nbformat.write(nb, str(path))
+
+    cache_dir = tmp_path / "cache"
+
+    # First call — summarizes and caches
+    provider1 = MockNotebookProvider()
+    result1 = compact_notebook(path, provider=provider1, cache_dir=cache_dir)
+    assert len(provider1.calls) == 1
+
+    # Second call — should use cache
+    provider2 = MockNotebookProvider()
+    result2 = compact_notebook(path, provider=provider2, cache_dir=cache_dir)
+    assert len(provider2.calls) == 0  # Cached, no provider calls
+
+    # Same summary in both outputs
+    assert result1 == result2
+
+
+def test_summarize_provider_failure_is_graceful(tmp_path):
+    """Provider errors don't crash — cell just has no summary."""
+    nb = nbformat.v4.new_notebook()
+    nb.cells = [
+        nbformat.v4.new_code_cell("x = 42\ny = x + 1\nz = y * 2"),
+    ]
+    path = tmp_path / "fail.ipynb"
+    nbformat.write(nb, str(path))
+
+    provider = FailingNotebookProvider()
+    cache_dir = tmp_path / "cache"
+    result = compact_notebook(path, provider=provider, cache_dir=cache_dir)
+
+    # Should not crash, and should not show a summary
+    assert "### Cell 0 [code]" in result
+    assert "> *Summary:" not in result
+
+
+def test_summarize_works_in_both_code_modes(tmp_path):
+    """Summary appears in both code-visible and code-hidden modes."""
+    nb = nbformat.v4.new_notebook()
+    nb.cells = [
+        nbformat.v4.new_code_cell("x = 42\ny = x + 1\nz = y * 2"),
+    ]
+    path = tmp_path / "modes.ipynb"
+    nbformat.write(nb, str(path))
+
+    provider = MockNotebookProvider()
+    cache_dir = tmp_path / "cache"
+
+    result_code = compact_notebook(path, include_code=True, provider=provider, cache_dir=cache_dir)
+    assert "> *Summary:" in result_code
+    assert "```python" in result_code
+
+    # Clear cache for second run
+    import shutil
+    shutil.rmtree(cache_dir, ignore_errors=True)
+
+    result_nocode = compact_notebook(path, include_code=False, provider=provider, cache_dir=cache_dir)
+    assert "> *Summary:" in result_nocode
+
+
+def test_no_provider_identical_output(simple_notebook):
+    """Without provider, output is identical to previous behavior."""
+    result_no_provider = compact_notebook(simple_notebook)
+    assert "> *Summary:" not in result_no_provider
+    assert "## Cells" in result_no_provider
+    assert "## Variable Flow" in result_no_provider
