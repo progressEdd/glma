@@ -13,7 +13,7 @@ Close all v1.0 gaps — fix known bugs, complete unfinished features, and ship p
 - [x] **Phase 5: Bug Fixes** - Fix export default, notebook truncation, stale placeholder
 - [x] **Phase 6: Summarization Infrastructure** - Provider protocol, DB update method, summarization pipeline
 - [x] **Phase 7: CLI Integration & Providers** - Wire up CLI flags, implement OpenAI-compatible and pi providers
-- [ ] **Phase 8: ARCHITECTURE.md & Export Polish** - Generate codebase architecture summary, verify all outputs flow summaries
+- [ ] **Phase 9: Notebook Cell Summarization** - Wire LLM summarization into notebook query path with cell-level caching
 
 ## Phase Details
 
@@ -53,16 +53,23 @@ Close all v1.0 gaps — fix known bugs, complete unfinished features, and ship p
   7. openai remains an optional dependency (`pip install glma[ai]`); non-AI installs still work
   8. Summaries appear in writer markdown output (per-file .md in .glma-index/)
 
-### Phase 8: ARCHITECTURE.md & Export Polish
-**Goal**: Exports include a codebase-level ARCHITECTURE.md derived from relationship data and summaries, giving agents instant high-level understanding
-**Depends on**: Phase 7 (summaries available in DB)
-**Requirements**: ARCH-01
+### Phase 8: ARCHITECTURE.md & Export Polish *(COMPLETE)*
+**Goal**: Exports include a codebase-level ARCHITECTURE.md derived from relationship data and summaries
+**Depends on**: Phase 7
+**Result**: All 3 tasks implemented, 27 export tests passing
+
+### Phase 9: Notebook Cell Summarization
+**Goal**: `glma query notebook.ipynb --summarize` generates per-cell AI summaries shown in compacted markdown output, with content-hash-based caching to avoid redundant LLM calls
+**Depends on**: Phase 7 (summarization providers exist)
+**Requirements**: NSUMM-01, NSUMM-02, NSUMM-03
 **Success Criteria** (what must be TRUE):
-  1. `glma export` generates ARCHITECTURE.md alongside INDEX.md and RELATIONSHIPS.md in the export output
-  2. ARCHITECTURE.md contains: project structure overview, module dependency graph, entry points, and key interfaces derived from DB data
-  3. ARCHITECTURE.md includes a timestamp header indicating when the index was generated
-  4. Running export on the glma codebase itself produces a useful ARCHITECTURE.md (dogfood test)
-  5. All existing tests pass; new tests cover ARCHITECTURE.md generation
+  1. `glma query notebook.ipynb --summarize` produces compacted markdown with per-cell LLM summaries as blockquote lines
+  2. `--summarize` with no provider defaults to local OpenAI-compatible provider (same as `glma index --summarize`)
+  3. `--summarize-provider` and `--summarize-model` flags work for notebook queries
+  4. Summaries are cached in `.glma-index/notebook-cache/` keyed on cell content hash — unchanged cells are not re-summarized
+  5. Without `--summarize`, notebook query output is identical to current behavior (no regressions)
+  6. Empty or trivial cells (< 3 non-empty lines) are skipped during summarization
+  7. All existing tests pass; new tests cover cache logic, provider integration, and CLI flag handling
 
 ## Progress
 
@@ -74,4 +81,5 @@ Phases execute in numeric order: 5 → 6 → 7 → 8
 | 5. Bug Fixes | 2/2 | Complete | 2026-04-10 |
 | 6. Summarization Infrastructure | 1/1 | Complete | 2026-04-10 |
 | 7. CLI Integration & Providers | 3/3 | Complete | 2026-04-10 |
-| 8. ARCHITECTURE.md & Export Polish | 0/? | Pending | - |
+| 8. ARCHITECTURE.md & Export Polish | 1/1 | Complete | 2026-04-10 |
+| 9. Notebook Cell Summarization | 2/2 | Planned | - |
