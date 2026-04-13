@@ -42,4 +42,4 @@ Unified both INDEX.md and per-file exports to use the same AI summaries from the
 
 ## Resolved
 
-2026-04-13 — Commits `0fca96d` (INDEX.md uses AI summaries), `d08ef15` (per-file export aligned). 64/64 tests passing.
+2026-04-13 — Commit `0fca96d` (INDEX.md uses AI summaries), `1b50260` (reverted per-file export, INDEX.md reads AI summaries directly from DB chunks). INDEX.md now shows full joined AI summaries (no truncation). Per-file exports keep rule-based summary + AI Chunk Summaries section. Both use the same AI data from the DB. 64/64 tests passing.
