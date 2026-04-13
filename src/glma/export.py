@@ -22,6 +22,7 @@ def _format_export_file(
     chunks: list[Chunk],
     relationships: list[dict],
     config: ExportConfig,
+    file_summary: str = "",
 ) -> str:
     """Generate enriched markdown for a single file in the export.
 
@@ -33,6 +34,7 @@ def _format_export_file(
         chunks: All chunks for the file.
         relationships: All relationships for the file.
         config: Export configuration.
+        file_summary: Pre-computed file-level summary (AI or rule-based).
 
     Returns:
         Complete markdown string for this file.
@@ -58,18 +60,16 @@ def _format_export_file(
     # Summary section
     lines.append("## Summary")
     lines.append("")
-    # File summary: rule-based always, enhanced with AI chunk summaries if available
-    rule_summary = generate_rule_summary(file_path, chunks, relationships)
-    lines.append(rule_summary)
+    ai_chunks = [c for c in chunks if c.summary]
 
-    # If ai_summaries enabled, show AI chunk summary overview
-    if config.ai_summaries:
-        ai_chunks = [c for c in chunks if c.summary]
-        if ai_chunks:
-            lines.append("")
-            lines.append("**AI Chunk Summaries:**")
-            for c in ai_chunks[:10]:
-                lines.append(f"- **{c.name}**: {c.summary}")
+    if ai_chunks:
+        # Use AI summaries as the primary file summary
+        for c in ai_chunks:
+            lines.append(f"- **{c.name}**: {c.summary}")
+    else:
+        # Fall back to rule-based summary
+        lines.append(file_summary or generate_rule_summary(file_path, chunks, relationships))
+
     lines.append("")
 
     # Key Exports table
@@ -861,6 +861,7 @@ def export_index(
             data["chunks"],
             data["relationships"],
             config,
+            file_summary=data["summary"],
         )
         file_exports[file_path] = export_md
 
