@@ -838,8 +838,12 @@ def export_index(
         chunks = store.get_chunks_for_file(file_path)
         relationships = store.get_file_relationships(file_path)
 
-        # Generate rule-based summary
-        summary = generate_rule_summary(file_path, chunks, relationships)
+        # Use AI chunk summaries from DB if available, fall back to rule-based
+        ai_summaries = [c.summary for c in chunks if c.summary]
+        if ai_summaries:
+            summary = "; ".join(ai_summaries)
+        else:
+            summary = generate_rule_summary(file_path, chunks, relationships)
 
         file_data[file_path] = {
             "record": record,
