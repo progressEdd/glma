@@ -136,6 +136,31 @@ def index(
             if chunks:
                 summarize_chunks(store, chunks, provider)
 
+        # Generate file-level LLM summaries from chunk summaries
+        if not cfg.quiet:
+            console.print("[dim]Generating file-level summaries...[/dim]")
+
+        for file_path in sorted(indexed_files.keys()):
+            record = store.get_file_record(file_path)
+            if record and record.file_summary:
+                continue  # Already have a file summary
+            chunks = store.get_chunks_for_file(file_path)
+            chunk_summaries = [c.summary for c in chunks if c.summary]
+            if not chunk_summaries:
+                continue
+            try:
+                context = f"File: {file_path}"
+                chunk_text = "\n".join(f"- {s}" for s in chunk_summaries)
+                prompt = (
+                    f"Based on these per-function/class summaries, write a single 1-2 sentence summary of what this file does as a whole.\n"
+                    f"\n{chunk_text}"
+                )
+                file_summary = provider.summarize(prompt, context)
+                if file_summary:
+                    store.update_file_summary(file_path, file_summary)
+            except Exception:
+                pass  # Fail open
+
         # Regenerate static markdown files with AI summaries
         from glma.index.writer import write_markdown
 

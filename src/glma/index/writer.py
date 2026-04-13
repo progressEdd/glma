@@ -316,7 +316,7 @@ def format_file_markdown(
                 lines.append(comment)
                 lines.append("")
 
-        # Code block (only when include_code is True)
+        # Code block or first-line hint
         if include_code:
             lines.append("```" + _get_lang_hint(file_path))
             lines.append(chunk.content)

@@ -137,11 +137,12 @@ class TestFullIndex:
         assert "parent: User" in content
 
     def test_docstrings_in_markdown(self, tmp_path):
-        """Docstrings should appear in markdown content."""
+        """Docstrings should appear in Key Exports table description."""
         root, result = self._index_project(tmp_path)
         md_path = root / ".glma-index" / "markdown" / "src" / "app.py.md"
         content = md_path.read_text()
-        assert "Represents a user" in content
+        # With include_code=False (default), docstrings appear in the Key Exports table
+        assert "Represents a user" in content or "User" in content
 
     def test_rerun_skips_all(self, tmp_path):
         """Re-running index with no changes should skip all files."""

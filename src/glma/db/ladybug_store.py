@@ -34,6 +34,7 @@ class LadybugStore:
         content_hash STRING,
         last_indexed STRING,
         chunk_count INT64,
+        file_summary STRING,
         PRIMARY KEY (path)
     )
     """
@@ -78,13 +79,15 @@ class LadybugStore:
         )
         data = record.model_dump()
         data["language"] = data["language"].value  # Serialize enum to string
+        data["file_summary"] = data.get("file_summary") or ""
         self.conn.execute(
             """CREATE (f:File {
                 path: $path,
                 language: $language,
                 content_hash: $content_hash,
                 last_indexed: $last_indexed,
-                chunk_count: $chunk_count
+                chunk_count: $chunk_count,
+                file_summary: $file_summary
             })""",
             data,
         )
@@ -180,6 +183,18 @@ class LadybugStore:
             {"cid": chunk_id, "summary": summary},
         )
 
+    def update_file_summary(self, file_path: str, summary: str) -> None:
+        """Update the file-level LLM summary for a file.
+
+        Args:
+            file_path: Relative file path.
+            summary: LLM-generated file-level summary.
+        """
+        self.conn.execute(
+            "MATCH (f:File {path: $fp}) SET f.file_summary = $summary",
+            {"fp": file_path, "summary": summary},
+        )
+
     def delete_relationships(self, file_path: str) -> None:
         """Delete all outgoing relationships from a file's chunks."""
         self.conn.execute(
@@ -264,7 +279,7 @@ class LadybugStore:
     def get_file_record(self, file_path: str) -> Optional[FileRecord]:
         """Get a file record by path, or None if not indexed."""
         result = self.conn.execute(
-            "MATCH (f:File {path: $path}) RETURN f.path, f.language, f.content_hash, f.last_indexed, f.chunk_count",
+            "MATCH (f:File {path: $path}) RETURN f.path, f.language, f.content_hash, f.last_indexed, f.chunk_count, f.file_summary",
             {"path": file_path},
         )
         rows = list(result)
@@ -277,6 +292,7 @@ class LadybugStore:
             content_hash=row[2],
             last_indexed=row[3],
             chunk_count=row[4],
+            file_summary=row[5] or None,
         )
 
     def get_chunks_for_file(self, file_path: str) -> list[Chunk]:

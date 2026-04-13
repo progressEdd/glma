@@ -58,10 +58,15 @@ def _format_export_file(
     # Summary section
     lines.append("## Summary")
     lines.append("")
-    rule_summary = generate_rule_summary(file_path, chunks, relationships)
-    lines.append(rule_summary)
 
-    # If AI chunk summaries are available, show them
+    # Use LLM file summary if available, fall back to rule-based
+    if file_record and hasattr(file_record, 'file_summary') and file_record.file_summary:
+        lines.append(file_record.file_summary)
+    else:
+        rule_summary = generate_rule_summary(file_path, chunks, relationships)
+        lines.append(rule_summary)
+
+    # Show per-chunk AI summaries if available
     ai_chunks = [c for c in chunks if c.summary]
     if ai_chunks:
         lines.append("")
@@ -256,12 +261,15 @@ def generate_index_md(
         chunk_count = len(chunks)
         rel_link = _format_rel_path(path)
 
-        # Use AI chunk summaries from DB if available, fall back to rule-based
-        ai_summaries = [c.summary for c in chunks if c.summary]
-        if ai_summaries:
-            summary = "; ".join(ai_summaries)
+        # Use LLM file summary if available, otherwise compose from chunk summaries or rule-based
+        if record and hasattr(record, 'file_summary') and record.file_summary:
+            summary = record.file_summary
         else:
-            summary = data.get("summary", "")
+            ai_summaries = [c.summary for c in chunks if c.summary]
+            if ai_summaries:
+                summary = "; ".join(ai_summaries)
+            else:
+                summary = data.get("summary", "")
 
         lines.append(f"| [{path}]({rel_link}) | {lang} | {chunk_count} | {summary} |")
 

@@ -43,6 +43,7 @@ class FileRecord(BaseModel):
     content_hash: str = Field(..., description="BLAKE2b hash of file content")
     last_indexed: str = Field(..., description="ISO 8601 timestamp")
     chunk_count: int = Field(default=0)
+    file_summary: Optional[str] = Field(default=None, description="LLM-generated file-level summary")
 
 
 class RelType(str, Enum):
