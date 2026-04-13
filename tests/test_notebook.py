@@ -36,8 +36,8 @@ def test_compact_simple_notebook(simple_notebook):
     assert "> Good stuff" in result
 
 
-def test_outputs_stripped_by_default(tmp_path):
-    """Test that cell outputs are not included by default."""
+def test_outputs_included_by_default(tmp_path):
+    """Test that cell outputs are included by default."""
     nb = nbformat.v4.new_notebook()
     cell = nbformat.v4.new_code_cell("print('hello')")
     cell.outputs = [nbformat.v4.new_output(output_type="stream", text="hello\n")]
@@ -46,8 +46,9 @@ def test_outputs_stripped_by_default(tmp_path):
     nbformat.write(nb, str(path))
 
     result = compact_notebook(path)
-    # Output section should not appear
-    assert "**Output:**" not in result
+    # Output section should appear by default now
+    assert "**Output:**" in result
+    assert "hello" in result
 
 
 def test_outputs_included_when_requested(tmp_path):

@@ -177,7 +177,7 @@ def query(
     summary_only: bool = typer.Option(False, "--summary-only", help="Show only file summary."),
     output: Optional[str] = typer.Option(None, "--output", "-o", help="Output file path (default: stdout)."),
     repo_root: Optional[Path] = typer.Option(None, "--repo", "-r", help="Repo root directory (auto-detected)."),
-    include_outputs: bool = typer.Option(False, "--include-outputs", help="Include notebook cell outputs."),
+    include_outputs: bool = typer.Option(True, "--include-outputs", help="Include notebook cell outputs (default: on)."),
     include_code: bool = typer.Option(False, "--include-code", help="Include full source code in notebook output (default: summary only)."),
     summarize: bool = typer.Option(
         False,
