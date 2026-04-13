@@ -97,7 +97,11 @@ Add `--format` / `-f` flag to `glma export`:
 4. Implement `_format_export_file_kv()` in `export.py` — converts file data to markdown-kv
 5. Implement `_format_export_file_json()` / `_format_export_file_yaml()` for other formats
 6. Route `export_index()` through format-specific formatters based on config
-7. Update INDEX.md / ARCHITECTURE.md generation for kv format (headings instead of tables)
+7. Format applies to **all** output files, not just per-file exports:
+   - `INDEX.md`: files table becomes `markdown-kv` headings by default, or stays as table when `--format markdown`
+   - `ARCHITECTURE.md`: module tables become kv headings by default
+   - `RELATIONSHIPS.md`: dependency tables become kv headings by default
+   - Per-file exports: chunk data as kv headings by default
 8. Update tests
 
 ### Key design decisions
