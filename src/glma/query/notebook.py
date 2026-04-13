@@ -411,7 +411,7 @@ def _format_cell(
 
 def compact_notebook(
     filepath: str | Path,
-    include_outputs: bool = True,
+    include_outputs: bool = False,
     include_code: bool = False,
     provider: SummarizerProvider | None = None,
     cache_dir: Path | None = None,
@@ -420,7 +420,7 @@ def compact_notebook(
 
     Args:
         filepath: Path to the .ipynb file.
-        include_outputs: If True, include cell outputs in the output (default: True).
+        include_outputs: If True, include cell outputs in the output (default: False).
         include_code: If True, include full source code. If False, show only
             first line + line count per cell (summary mode).
         provider: Optional SummarizerProvider for AI cell summaries.
