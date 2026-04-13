@@ -136,6 +136,15 @@ def index(
             if chunks:
                 summarize_chunks(store, chunks, provider)
 
+        # Regenerate static markdown files with AI summaries
+        from glma.index.writer import write_markdown
+
+        for file_path in sorted(indexed_files.keys()):
+            chunks = store.get_chunks_for_file(file_path)
+            if chunks:
+                file_rels = store.get_file_relationships(file_path)
+                write_markdown(chunks, repo_path, cfg.output_dir, relationships=file_rels)
+
         if not cfg.quiet:
             console.print(f"[green]✓[/green] Summarization complete: {len(indexed_files)} files processed")
 

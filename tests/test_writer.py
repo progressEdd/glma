@@ -50,12 +50,18 @@ class TestFormatFileMarkdown:
         assert "### MyClass (class" in md
 
     def test_python_code_block_hint(self, py_chunks):
-        md = format_file_markdown("sample.py", py_chunks)
+        md = format_file_markdown("sample.py", py_chunks, include_code=True)
         assert "```python" in md
 
     def test_c_code_block_hint(self, c_chunks):
-        md = format_file_markdown("sample.c", c_chunks)
+        md = format_file_markdown("sample.c", c_chunks, include_code=True)
         assert "```c" in md
+
+    def test_code_excluded_by_default(self, py_chunks):
+        md = format_file_markdown("sample.py", py_chunks)
+        assert "```python" not in md
+        # First-line hint should appear for chunks without summaries
+        assert "`def another_function():`" in md
 
     def test_exports_table_top_level_only(self, py_chunks):
         md = format_file_markdown("sample.py", py_chunks)

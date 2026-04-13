@@ -254,6 +254,7 @@ def format_file_markdown(
     file_path: str,
     chunks: list[Chunk],
     relationships: Optional[list[dict]] = None,
+    include_code: bool = False,
 ) -> str:
     """Generate layered summary markdown for an indexed file.
 
@@ -261,6 +262,8 @@ def format_file_markdown(
         file_path: Relative path from repo root.
         chunks: List of extracted chunks for this file.
         relationships: Optional list of relationship dicts for the file.
+        include_code: If True, include full source code in code blocks.
+            If False (default), only show summaries, signatures, and relationships.
 
     Returns:
         Complete markdown string.
@@ -313,10 +316,15 @@ def format_file_markdown(
                 lines.append(comment)
                 lines.append("")
 
-        # Code block
-        lines.append("```" + _get_lang_hint(file_path))
-        lines.append(chunk.content)
-        lines.append("```")
+        # Code block (only when include_code is True)
+        if include_code:
+            lines.append("```" + _get_lang_hint(file_path))
+            lines.append(chunk.content)
+            lines.append("```")
+        elif not chunk.summary and not chunk.attached_comments:
+            # No summary or comments — show first line as a hint
+            first_line = chunk.content.strip().splitlines()[0][:80] if chunk.content.strip() else "(empty)"
+            lines.append(f"`{first_line}{'...' if len(chunk.content.strip().splitlines()[0]) > 80 else ''}`")
 
         # Inline relationships
         if relationships:
@@ -343,6 +351,7 @@ def write_markdown(
     repo_root: Path,
     output_dir: str,
     relationships: Optional[list[dict]] = None,
+    include_code: bool = False,
 ) -> Path:
     """Write markdown file for a single indexed file.
 
@@ -353,6 +362,7 @@ def write_markdown(
         repo_root: Absolute path to repo root.
         output_dir: Output directory name (relative to repo root).
         relationships: Optional list of relationship dicts.
+        include_code: If True, include full source code. Default False.
 
     Returns:
         Path to the written markdown file.
@@ -370,7 +380,7 @@ def write_markdown(
     md_filename = Path(file_path).name + ".md"
     md_path = md_dir / md_filename
 
-    content = format_file_markdown(file_path, chunks, relationships=relationships)
+    content = format_file_markdown(file_path, chunks, relationships=relationships, include_code=include_code)
     md_path.write_text(content, encoding="utf-8")
 
     return md_path
