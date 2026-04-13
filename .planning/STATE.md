@@ -4,7 +4,7 @@ milestone: v1.1
 milestone_name: milestone
 status: completed
 stopped_at: Milestone v1.1 complete — all phases shipped
-last_updated: "2026-04-11T01:35:58.751Z"
+last_updated: "2026-04-13T16:08:01.971Z"
 last_activity: 2026-04-11 - Phase 9 complete
 progress:
   total_phases: 5
