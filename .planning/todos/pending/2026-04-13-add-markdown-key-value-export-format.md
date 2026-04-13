@@ -1,17 +1,24 @@
 ---
 created: 2026-04-13T20:30:00Z
-title: Add markdown key-value export format for structured data
+title: Add markdown key-value export format as default with multi-format support
 area: api
 files:
   - src/glma/export.py
   - src/glma/cli.py
+  - src/glma/models.py
 ---
 
 ## Problem
 
-Currently `glma export` only outputs structured markdown with sections, tables, and relationship graphs. For some downstream consumers (Terraform-like configs, structured key-value data, LLM context windows), a flat markdown key-value format would be more useful and compact.
+Currently `glma export` only outputs structured markdown with sections, tables, and relationship graphs. The default export format should be a compact markdown key-value representation that's easy for LLMs to parse and humans to scan. Users should also be able to select other formats.
 
-For example, given JSON like:
+## Solution
+
+### New default: `markdown-kv`
+
+Make `markdown-kv` the default export format. Each nesting level maps to a markdown heading, leaf key-value pairs render as `key: value` lines.
+
+Given structured data like:
 ```json
 {
   "resource": {
@@ -30,7 +37,7 @@ For example, given JSON like:
 }
 ```
 
-The desired markdown output would be:
+The markdown-kv output would be:
 ```markdown
 # resource
 
@@ -48,16 +55,54 @@ Project: api-service
 CostCenter: CC-1106
 ```
 
-## Solution
+For glma's indexed data, this means each file's chunks become a key-value hierarchy:
+```markdown
+# cli.py
 
-Add a new export format option (e.g., `--format kv` or `--format markdown-kv`) that converts the chunk/relationship data into a hierarchical markdown key-value representation:
+language: python
+last_indexed: 2026-04-13T20:15:23
+chunk_count: 8
 
-- Each nesting level maps to a markdown heading (`#`, `##`, `###`, etc.)
-- Leaf key-value pairs render as `key: value` lines
-- Supports arbitrary nesting depth (up to heading level 6, then fallback to bold/indent)
+## version_callback
 
-Could be exposed via:
-- `glma export --format kv` for the key-value markdown format
-- Or as a separate output option on `glma query` for single files
+type: function
+lines: L21-L24
+summary: Prints the current application version to the console...
+calls: []
 
-This would be useful for exporting indexed data in a format that's easy for LLMs to parse and humans to scan quickly.
+## index
+
+type: function
+lines: L38-L140
+summary: Indexes a repository's source files into a database...
+calls: load_config, run_index, summarize_chunks
+```
+
+### Multi-format support
+
+Add `--format` / `-f` flag to `glma export`:
+
+| Format | Description |
+| ------ | ----------- |
+| `markdown-kv` | **Default**. Hierarchical key-value headings (compact, LLM-friendly) |
+| `markdown` | Current table-based format (sections, tables, relationship graphs) |
+| `json` | Raw JSON export |
+| `yaml` | YAML export |
+
+### Implementation steps
+
+1. Add `ExportFormat` enum to `models.py` with values: `markdown_kv`, `markdown`, `json`, `yaml`
+2. Add `format` field to `ExportConfig` with default `markdown_kv`
+3. Add `--format` / `-f` CLI option to `glma export` command
+4. Implement `_format_export_file_kv()` in `export.py` — converts file data to markdown-kv
+5. Implement `_format_export_file_json()` / `_format_export_file_yaml()` for other formats
+6. Route `export_index()` through format-specific formatters based on config
+7. Update INDEX.md / ARCHITECTURE.md generation for kv format (headings instead of tables)
+8. Update tests
+
+### Key design decisions
+
+- `markdown-kv` is the default because it's the most compact and LLM-consumable
+- Existing `markdown` format (tables, sections) remains available as an explicit opt-in
+- JSON/YAML are trivial struct-to-serializers over the existing `file_data` dict
+- File extensions in output directory should match format: `.md` for both markdown variants, `.json`, `.yaml`
