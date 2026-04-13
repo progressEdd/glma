@@ -22,7 +22,6 @@ def _format_export_file(
     chunks: list[Chunk],
     relationships: list[dict],
     config: ExportConfig,
-    file_summary: str = "",
 ) -> str:
     """Generate enriched markdown for a single file in the export.
 
@@ -34,7 +33,6 @@ def _format_export_file(
         chunks: All chunks for the file.
         relationships: All relationships for the file.
         config: Export configuration.
-        file_summary: Pre-computed file-level summary (AI or rule-based).
 
     Returns:
         Complete markdown string for this file.
@@ -60,16 +58,16 @@ def _format_export_file(
     # Summary section
     lines.append("## Summary")
     lines.append("")
-    ai_chunks = [c for c in chunks if c.summary]
+    rule_summary = generate_rule_summary(file_path, chunks, relationships)
+    lines.append(rule_summary)
 
+    # If AI chunk summaries are available, show them
+    ai_chunks = [c for c in chunks if c.summary]
     if ai_chunks:
-        # Use AI summaries as the primary file summary
+        lines.append("")
+        lines.append("**AI Chunk Summaries:**")
         for c in ai_chunks:
             lines.append(f"- **{c.name}**: {c.summary}")
-    else:
-        # Fall back to rule-based summary
-        lines.append(file_summary or generate_rule_summary(file_path, chunks, relationships))
-
     lines.append("")
 
     # Key Exports table
@@ -253,16 +251,19 @@ def generate_index_md(
         data = file_data.get(path, {})
         record = data.get("record")
         chunks = data.get("chunks", [])
-        summary = data.get("summary", "")
 
         lang = record.language.value if record and hasattr(record, "language") else "?"
         chunk_count = len(chunks)
         rel_link = _format_rel_path(path)
 
-        # Truncate summary for table display
-        short_summary = summary[:60] + "..." if len(summary) > 60 else summary
+        # Use AI chunk summaries from DB if available, fall back to rule-based
+        ai_summaries = [c.summary for c in chunks if c.summary]
+        if ai_summaries:
+            summary = "; ".join(ai_summaries)
+        else:
+            summary = data.get("summary", "")
 
-        lines.append(f"| [{path}]({rel_link}) | {lang} | {chunk_count} | {short_summary} |")
+        lines.append(f"| [{path}]({rel_link}) | {lang} | {chunk_count} | {summary} |")
 
     lines.append("")
 
@@ -861,7 +862,6 @@ def export_index(
             data["chunks"],
             data["relationships"],
             config,
-            file_summary=data["summary"],
         )
         file_exports[file_path] = export_md
 

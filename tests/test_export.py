@@ -260,14 +260,14 @@ class TestChunkSummaryRendering:
         assert "*(Code omitted" in md
 
     def test_ai_summaries_shows_chunk_overview(self):
-        """Files with AI summaries show per-chunk bullet list in Summary section."""
+        """Files with AI summaries show AI Chunk Summaries section."""
         chunk1 = _make_chunk("func_a")
         chunk1.summary = "Summary A"
         chunk2 = _make_chunk("func_b")
         chunk2.summary = "Summary B"
         config = ExportConfig(ai_summaries=True)
         md = _format_export_file("src/test.py", None, [chunk1, chunk2], [], config)
-        assert "**AI Chunk Summaries:**" not in md  # Old heading removed
+        assert "**AI Chunk Summaries:**" in md
         assert "- **func_a**: Summary A" in md
         assert "- **func_b**: Summary B" in md
 
