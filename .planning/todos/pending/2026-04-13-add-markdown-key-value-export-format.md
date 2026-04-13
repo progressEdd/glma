@@ -104,9 +104,41 @@ Add `--format` / `-f` flag to `glma export`:
    - Per-file exports: chunk data as kv headings by default
 8. Update tests
 
-### Key design decisions
+### Concrete example — config.py.md relationships section
 
-- `markdown-kv` is the default because it's the most compact and LLM-consumable
-- Existing `markdown` format (tables, sections) remains available as an explicit opt-in
-- JSON/YAML are trivial struct-to-serializers over the existing `file_data` dict
-- File extensions in output directory should match format: `.md` for both markdown variants, `.json`, `.yaml`
+**markdown-kv (default):**
+```markdown
+### load_config
+
+type: function
+lines: L24-L43
+summary: Initializes an `IndexConfig` object...
+calls: IndexConfig (INFERRED, L43), cli_overrides.items (INFERRED, L39), merged.update (INFERRED, L37)...
+```
+
+**markdown (current table format):**
+```markdown
+### Outgoing Calls
+
+| From | To | Confidence | Line |
+| ---- | -- | ---------- | ---- |
+| load_config | ? (IndexConfig) | INFERRED | L43 |
+| load_config | ? (cli_overrides.items) | INFERRED | L39 |
+...
+```
+
+**json:**
+```json
+{"calls": [{"from": "load_config", "to": "IndexConfig", "confidence": "INFERRED", "line": 43}]}
+```
+
+**yaml:**
+```yaml
+calls:
+  - from: load_config
+    to: IndexConfig
+    confidence: INFERRED
+    line: 43
+```
+
+This applies to ALL tabular output: relationships, key exports, module tables in ARCHITECTURE.md, file listing in INDEX.md, etc.
