@@ -43,3 +43,5 @@ After the `summarize_chunks()` loop in `cli.py`, the CLI now iterates all indexe
 ## Resolved
 
 2026-04-13 — Commit `6eeeaf2`, 72/72 tests passing. Ran `glma index --summarize` on glma itself with Gemma 4 31B via LM Studio — all 28 files indexed, AI summaries generated, static markdown regenerated without code blocks.
+
+2026-04-13 — Commit `0fca96d`, export INDEX.md now uses AI chunk summaries from DB instead of rule-based "N function(s): ..." summaries.
