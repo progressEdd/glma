@@ -326,3 +326,65 @@ def test_no_provider_identical_output(simple_notebook):
     assert "> *Summary:" not in result_no_provider
     assert "## Cells" in result_no_provider
     assert "## Variable Flow" in result_no_provider
+
+
+def test_hash_changes_when_outputs_change(tmp_path):
+    """Cache invalidates when cell outputs change."""
+    from glma.query.notebook import _cell_content_hash, _cell_content_hash_with_outputs
+    source = "x = 42\ny = x + 1\nz = y * 2"
+    hash_no_outputs = _cell_content_hash(source)
+
+    outputs_v1 = [{"output_type": "stream", "text": "hello\n"}]
+    outputs_v2 = [{"output_type": "stream", "text": "world\n"}]
+
+    hash_v1 = _cell_content_hash_with_outputs(source, outputs_v1)
+    hash_v2 = _cell_content_hash_with_outputs(source, outputs_v2)
+    hash_empty = _cell_content_hash_with_outputs(source, [])
+
+    assert hash_v1 != hash_v2  # Different outputs → different hash
+    assert hash_v1 != hash_empty  # With outputs ≠ without outputs
+    assert hash_empty == hash_no_outputs  # No outputs matches original hash
+
+
+def test_format_outputs_truncation(tmp_path):
+    """Large outputs are truncated for LLM context."""
+    from glma.query.notebook import _format_outputs_for_context
+
+    short = _format_outputs_for_context([{"output_type": "stream", "text": "hi\n"}])
+    assert short == "hi"
+    assert "... (truncated" not in short
+
+    long_text = "x" * 2000
+    truncated = _format_outputs_for_context([{"output_type": "stream", "text": long_text}], max_chars=500)
+    assert len(truncated) < 600  # Truncated + marker
+    assert "... (truncated" in truncated
+    assert f"{len(long_text)} chars total" in truncated
+
+
+def test_outputs_included_in_summarization_context(tmp_path):
+    """Provider receives cell outputs appended to source code."""
+    nb = nbformat.v4.new_notebook()
+    cell = nbformat.v4.new_code_cell("x = 42\ny = x + 1\nz = y * 2")
+    cell.outputs = [nbformat.v4.new_output(output_type="stream", text="result: 86\n")]
+    nb.cells = [cell]
+    path = tmp_path / "with_output.ipynb"
+    nbformat.write(nb, str(path))
+
+    class SpyProvider:
+        def __init__(self):
+            self.calls = []
+        def summarize(self, code, context):
+            self.calls.append((code, context))
+            return "Saw the output"
+
+    provider = SpyProvider()
+    cache_dir = tmp_path / "cache"
+    result = compact_notebook(path, provider=provider, cache_dir=cache_dir)
+
+    assert len(provider.calls) == 1
+    code_arg = provider.calls[0][0]
+    # Output should be appended to the code sent to the provider
+    assert "# Output:" in code_arg
+    assert "result: 86" in code_arg
+    assert "x = 42" in code_arg  # Source code still present
+    assert "> *Summary: Saw the output*" in result

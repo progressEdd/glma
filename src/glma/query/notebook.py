@@ -35,6 +35,65 @@ def _cell_content_hash(source: str) -> str:
     return hashlib.blake2b(source.encode("utf-8"), digest_size=32).hexdigest()
 
 
+def _cell_content_hash_with_outputs(source: str, outputs: list) -> str:
+    """Compute BLAKE2b hash of cell source + outputs (for cache invalidation)."""
+    hasher = hashlib.blake2b(digest_size=32)
+    hasher.update(source.encode("utf-8"))
+    for output in outputs:
+        output_type = output.get("output_type", "")
+        if output_type == "stream":
+            text = output.get("text", "")
+            if isinstance(text, list):
+                text = "".join(text)
+            hasher.update(text.encode("utf-8"))
+        elif output_type == "execute_result":
+            data = output.get("data", {})
+            text = data.get("text/plain", "")
+            if isinstance(text, list):
+                text = "".join(text)
+            hasher.update(text.encode("utf-8"))
+        elif output_type == "error":
+            hasher.update(output.get("ename", "").encode("utf-8"))
+            hasher.update(output.get("evalue", "").encode("utf-8"))
+    return hasher.hexdigest()
+
+
+def _format_outputs_for_context(outputs: list, max_chars: int = 1500) -> str:
+    """Format cell outputs as text for LLM context, truncated to max_chars.
+
+    Returns a string representation of the outputs suitable for including
+    in a summarization prompt. Truncates with a marker if too long.
+    """
+    parts: list[str] = []
+    for output in outputs:
+        output_type = output.get("output_type", "")
+        if output_type == "stream":
+            text = output.get("text", "")
+            if isinstance(text, list):
+                text = "".join(text)
+            parts.append(text.rstrip())
+        elif output_type == "execute_result":
+            data = output.get("data", {})
+            text = data.get("text/plain", "")
+            if isinstance(text, list):
+                text = "".join(text)
+            parts.append(text.rstrip())
+        elif output_type == "error":
+            ename = output.get("ename", "Error")
+            evalue = output.get("evalue", "")
+            parts.append(f"[Error: {ename}: {evalue}]")
+        elif output_type == "display_data":
+            parts.append("[Display output]")
+
+    if not parts:
+        return ""
+
+    combined = "\n".join(parts)
+    if len(combined) > max_chars:
+        combined = combined[:max_chars] + f"\n... (truncated, {len(combined)} chars total)"
+    return combined
+
+
 def _notebook_file_hash(filepath: Path) -> str:
     """Compute BLAKE2b hash of the notebook file contents."""
     content = filepath.read_bytes()
@@ -419,7 +478,9 @@ def compact_notebook(
             if len(non_empty_lines) < 3:
                 continue
 
-            content_hash = _cell_content_hash(cell.source)
+            # Use output-aware hash so cache invalidates when outputs change
+            cell_outputs = cell.get("outputs", [])
+            content_hash = _cell_content_hash_with_outputs(cell.source, cell_outputs)
 
             # Check cache
             if index in cached and cached[index][0] == content_hash:
@@ -440,7 +501,13 @@ def compact_notebook(
                     f"Cell: {index} [code]\n"
                     f"Section: \"{section_name}\""
                 )
-                summary = provider.summarize(cell.source, context)
+                # Include truncated cell outputs in context so LLM can summarize
+                # what the cell actually produced (respects context window limits)
+                output_text = _format_outputs_for_context(cell_outputs, max_chars=1500)
+                code_for_summary = cell.source
+                if output_text:
+                    code_for_summary = f"{cell.source}\n\n# Output:\n{output_text}"
+                summary = provider.summarize(code_for_summary, context)
                 if summary:
                     cell_summaries[index] = summary
                     cache_updates.append(CachedCell(index=index, content_hash=content_hash, summary=summary))
