@@ -37,35 +37,45 @@ Agents can call a single command and get exactly the code context they need to i
 - ✓ Optional AI summaries via OpenAI-compatible local model (Phase 4)
 - ✓ 211 tests, all passing (Phase 1-4)
 
-## Current Milestone: v1.1 Polish & Complete
+## Current Milestone: v1.2 Robustness & Export Formats
 
-**Goal:** Close all v1.0 gaps — fix bugs, complete features, and ship per-chunk AI summarization persisted to the database.
+**Goal:** Make summarization robust for real-world codebases (large chunks, any context window) and add compact key-value export format.
 
 **Target features:**
-- Fix markdown export to default summaries-only (`include_code` → `False`)
-- Fix notebook cell source truncation (list comprehensions)
-- Remove stale Phase 3 placeholder from writer output
-- Per-chunk AI summaries persisted to DB, with pluggable model providers (local Ollama/LM Studio, pi agent, etc.)
-- Generate ARCHITECTURE.md summary file in exports
+- Truncate oversized chunks before summarization (configurable limits)
+- Markdown key-value export format as new default (LLM-friendly)
+- Multi-format export support (markdown, json, yaml)
+- Pi agent integration for summarization (model hints, provider presets)
 
 **Key context:**
-- One summarization pipeline, multiple providers. Local OpenAI-compatible and pi are just different backends.
-- Single model for everything — chunk summaries, future query rewriting, future embedding. One config.
-- Foundational for future semantic search. Ladybug already has native vector indices.
-- No new languages, no new architecture — purely closing v1.0 gaps.
+- Phase 10 is a robustness fix — summarization currently fails on large chunks with small context models
+- Phase 11 is the main feature — new default export format designed for LLM consumption
+- Phase 12 is architectural — pi extension leveraging pi's model registry
+- v1.1 shipped 274 tests, all passing
 
-### Active (v1.1)
+### Active (v1.2)
 
-- [ ] Export defaults to summaries-only (include_code should default False)
-- [ ] Notebook cell source truncation fix (list comprehensions stripped)
-- [ ] Stale Phase 3 placeholder removal from writer.py
-- [ ] Per-chunk AI summaries (generate, persist to DB, flow into export/query/markdown)
-- [ ] Pluggable model providers for summarization (local OpenAI-compatible + pi agent)
-- [ ] Architecture summary file (ARCHITECTURE.md in export)
+- [ ] Pi agent integration (glma_summarize tool, model_hint resolution)
+- [ ] Named provider presets (--ai-provider ollama/lmstudio/etc.)
+
+### Validated (v1.2)
+
+- ✓ Chunk truncation before summarization (Phase 10)
+- ✓ Markdown key-value export format as default (Phase 11)
+- ✓ Multi-format export support — markdown-kv, markdown, json, yaml (Phase 11)
+
+### Completed (v1.1)
+
+- [x] Export defaults to summaries-only (include_code defaults False)
+- [x] Notebook cell source truncation fix (list comprehensions preserved)
+- [x] Stale Phase 3 placeholder removal from writer.py
+- [x] Per-chunk AI summaries (generate, persist to DB, flow into export/query/markdown)
+- [x] Pluggable model providers for summarization (local OpenAI-compatible + pi provider)
+- [x] Architecture summary file (ARCHITECTURE.md in export)
+- [x] Notebook cell AI summarization with caching
 
 ### Deferred
 
-- [ ] Local model provider presets (--ai-provider ollama/llamacpp/etc.)
 - [ ] Semantic search layer on top of graph relationships
 - [ ] Extended language support (C++, TypeScript, Rust)
 - [ ] MCP server interface for direct agent integration
@@ -113,6 +123,8 @@ Agents can call a single command and get exactly the code context they need to i
 | Three export output modes | Directory, tar.gz, stdout — covers all consumption scenarios | ✓ Good (Phase 4: export_index) |
 | Incremental pipeline params | changed_files/deleted_paths enable targeted re-indexing without full walk | ✓ Good (Phase 4: run_index extension) |
 | Start with C and Python | Both grammars tested, both relevant to the Linux kernel use case and general codebase analysis | ✓ Good (Phase 1: both working) |
+| Strategy pattern for export formats | Each format is a FormatRenderer subclass with factory dispatch; extensible without touching existing code | ✓ Good (Phase 11) |
+| KV as default export format | Most token-efficient for LLM consumers; CODEBASE.md consolidates all root files | ✓ Good (Phase 11) |
 
 ## Evolution
 
@@ -132,4 +144,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-10 after v1.1 milestone definition*
+*Last updated: 2026-04-14 after Phase 11 completion*
