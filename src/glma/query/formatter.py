@@ -271,3 +271,119 @@ def format_json_output(
         },
     }
     return json.dumps(result, indent=2)
+
+
+def format_yaml_output(
+    file_path: str,
+    file_record: FileRecord,
+    chunks: list[Chunk],
+    relationships: list[dict],
+    verbose: bool = False,
+) -> str:
+    """Generate YAML output for programmatic consumption."""
+    import yaml
+    result = {
+        "file": file_path,
+        "metadata": {
+            "language": file_record.language.value,
+            "last_indexed": file_record.last_indexed,
+            "chunk_count": file_record.chunk_count,
+            "content_hash": file_record.content_hash,
+        },
+        "chunks": [
+            {
+                "name": chunk.name,
+                "type": chunk.chunk_type.value,
+                "start_line": chunk.start_line,
+                "end_line": chunk.end_line,
+                "docstring": chunk.attached_comments[0] if chunk.attached_comments else None,
+                "summary": chunk.summary,
+                "content": chunk.content if verbose else None,
+            }
+            for chunk in chunks
+        ],
+        "relationships": {
+            "outgoing": [r for r in relationships if r.get("direction") != "incoming"],
+            "incoming": [r for r in relationships if r.get("direction") == "incoming"],
+        },
+    }
+    return yaml.dump(result, default_flow_style=False, allow_unicode=True, sort_keys=False)
+
+
+def format_kv_output(
+    file_path: str,
+    file_record: FileRecord,
+    chunks: list[Chunk],
+    relationships: dict,
+    verbose: bool = False,
+    query_config: Optional[QueryConfig] = None,
+) -> str:
+    """Generate compact key-value markdown for a queried file."""
+    if query_config is None:
+        query_config = QueryConfig(verbose=verbose)
+
+    lines: list[str] = []
+
+    lines.append(f"# {file_path}")
+    lines.append("")
+    lines.append(f"language: {file_record.language.value}")
+    lines.append(f"last_indexed: {file_record.last_indexed}")
+    lines.append(f"chunk_count: {file_record.chunk_count}")
+    lines.append("")
+
+    if not query_config.summary_only:
+        for chunk in chunks:
+            if chunk.parent_id is not None:
+                continue
+            lines.append(f"## {chunk.name}")
+            lines.append("")
+            lines.append(f"type: {chunk.chunk_type.value}")
+            lines.append(f"lines: L{chunk.start_line}-L{chunk.end_line}")
+
+            if chunk.summary:
+                lines.append(f"summary: {chunk.summary}")
+
+            if query_config.verbose:
+                lang = _get_lang_hint(file_path)
+                lines.append("")
+                lines.append(f"```{lang}")
+                lines.append(chunk.content)
+                lines.append("```")
+
+            # Relationships
+            if not query_config.no_relationships:
+                chunk_rels = relationships.get(chunk.id, {"outgoing": [], "incoming": []})
+                outgoing = chunk_rels.get("outgoing", [])
+                incoming = chunk_rels.get("incoming", [])
+
+                # Filter by rel_types if specified
+                if query_config.rel_types:
+                    outgoing = [r for r in outgoing if r.get("rel_type") in query_config.rel_types]
+                    incoming = [r for r in incoming if r.get("rel_type") in query_config.rel_types]
+
+                outgoing_by_type: dict[str, list[str]] = {}
+                for rel in outgoing:
+                    rt = rel.get("rel_type", "unknown")
+                    if rel.get("source_id") == rel.get("target_id") and rel.get("source_id"):
+                        target_display = f"? ({rel.get('target_name', 'unknown')})"
+                    elif rel.get("target_name_resolved"):
+                        target_display = rel["target_name_resolved"]
+                    else:
+                        target_display = rel.get("target_name", "unknown")
+                    outgoing_by_type.setdefault(rt, []).append(target_display)
+
+                for rt, targets in outgoing_by_type.items():
+                    lines.append(f"{rt}: {', '.join(targets)}")
+
+                incoming_by_type: dict[str, list[str]] = {}
+                for rel in incoming:
+                    rt = rel.get("rel_type", "unknown")
+                    source_name = rel.get("source_chunk_name", rel.get("source_name", "unknown"))
+                    incoming_by_type.setdefault(rt, []).append(source_name)
+
+                for rt, sources in incoming_by_type.items():
+                    lines.append(f"{rt}_from: {', '.join(sources)}")
+
+            lines.append("")
+
+    return "\n".join(lines)
