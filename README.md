@@ -17,7 +17,7 @@ glma export .         # Air-gapped static markdown export (directory/tar.gz/stdo
 
 **Relationship extraction:** function calls, imports, inheritance, includes — with confidence tagging (DIRECT/INFERRED) and cross-file resolution.
 
-**Notebook compaction:** `.ipynb` files get per-statement variable tracking and cross-cell flow tables, bypassing the graph DB entirely.
+**Notebook compaction:** `.ipynb` files get per-statement variable tracking, cross-cell flow tables, and optional per-cell AI summaries (with disk caching), bypassing the graph DB entirely.
 
 ## Install
 
@@ -55,11 +55,17 @@ glma query src/main.py --format json
 # Index with AI-generated per-chunk summaries
 glma index ~/my-project --summarize --summarize-provider local --summarize-model llama3
 
-# Compact a Jupyter notebook
+# Compact a Jupyter notebook (summary mode — first line + variable tracking)
+glma query analysis.ipynb
+
+# Compact a notebook with full source code
 glma query analysis.ipynb --include-code
 
-# Compact a notebook with per-cell AI summaries
+# Compact a notebook with per-cell AI summaries (cached to disk)
 glma query analysis.ipynb --summarize --summarize-provider local
+
+# Compact a notebook with AI summaries + cell outputs
+glma query analysis.ipynb --summarize --include-outputs
 
 # Watch for changes (incremental re-indexing)
 glma watch ~/my-project
