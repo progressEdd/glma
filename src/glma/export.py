@@ -1,18 +1,391 @@
 """Air-gapped markdown export for full index serialization."""
 
 import io
+import json
 import sys
 import tarfile
 import logging
+from abc import ABC, abstractmethod
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
 from glma.db.ladybug_store import LadybugStore
-from glma.models import Chunk, ChunkType, ExportConfig
+from glma.models import Chunk, ChunkType, ExportConfig, ExportFormat
 from glma.summaries import generate_rule_summary
 
 logger = logging.getLogger(__name__)
+
+try:
+    import yaml
+except ImportError:
+    yaml = None  # type: ignore[assignment]
+
+
+class FormatRenderer(ABC):
+    """Strategy interface for export format rendering."""
+
+    @abstractmethod
+    def format_file(
+        self,
+        file_path: str,
+        file_record: Optional[object],
+        chunks: list[Chunk],
+        relationships: list[dict],
+        config: ExportConfig,
+    ) -> str:
+        """Render a single file's export content."""
+        ...
+
+    @abstractmethod
+    def generate_root_files(
+        self,
+        indexed_files: dict,
+        file_data: dict[str, dict],
+    ) -> dict[str, str]:
+        """Generate root-level files (INDEX.md, CODEBASE.md, etc.).
+
+        Returns dict of {filename: content}.
+        """
+        ...
+
+    @abstractmethod
+    def file_extension(self) -> str:
+        """File extension for per-file exports (e.g., '.md', '.json', '.yaml')."""
+        ...
+
+
+class MarkdownRenderer(FormatRenderer):
+    """Renders current table-based markdown format (backward compatible)."""
+
+    def format_file(self, file_path, file_record, chunks, relationships, config):
+        return _format_export_file(file_path, file_record, chunks, relationships, config)
+
+    def generate_root_files(self, indexed_files, file_data):
+        return {
+            "INDEX.md": generate_index_md(indexed_files, file_data),
+            "RELATIONSHIPS.md": generate_relationships_md(file_data),
+            "ARCHITECTURE.md": generate_architecture_md(file_data),
+        }
+
+    def file_extension(self):
+        return ".md"
+
+
+def _serialize_file_data(file_path, file_record, chunks, relationships, config):
+    """Serialize file data to a plain dict for JSON/YAML renderers."""
+    result = {"path": file_path}
+
+    if file_record:
+        result["metadata"] = {
+            "language": file_record.language.value if hasattr(file_record.language, 'value') else str(file_record.language),
+            "last_indexed": file_record.last_indexed,
+            "chunk_count": file_record.chunk_count,
+            "content_hash": file_record.content_hash,
+        }
+        if hasattr(file_record, 'file_summary') and file_record.file_summary:
+            result["metadata"]["file_summary"] = file_record.file_summary
+
+    result["chunks"] = [
+        {
+            "name": c.name,
+            "type": c.chunk_type.value,
+            "start_line": c.start_line,
+            "end_line": c.end_line,
+            "summary": c.summary,
+            "content": c.content if config.include_code else None,
+            "parent_id": c.parent_id,
+        }
+        for c in chunks
+    ]
+
+    result["relationships"] = [
+        {
+            "source": r.get("source_name", ""),
+            "target": r.get("target_name_resolved", r.get("target_name", "")),
+            "type": r.get("rel_type", ""),
+            "confidence": r.get("confidence", ""),
+            "line": r.get("source_line", None),
+        }
+        for r in relationships
+    ]
+
+    return result
+
+
+class JsonRenderer(FormatRenderer):
+    """Renders export as JSON objects."""
+
+    def format_file(self, file_path, file_record, chunks, relationships, config):
+        data = _serialize_file_data(file_path, file_record, chunks, relationships, config)
+        return json.dumps(data, indent=2, default=str)
+
+    def generate_root_files(self, indexed_files, file_data):
+        root_data = {
+            "generated": datetime.now(timezone.utc).isoformat(),
+            "total_files": len(indexed_files),
+            "files": {
+                path: _serialize_file_data(
+                    path,
+                    data.get("record"),
+                    data.get("chunks", []),
+                    data.get("relationships", []),
+                    ExportConfig(),
+                )
+                for path, data in file_data.items()
+            },
+        }
+        return {"export.json": json.dumps(root_data, indent=2, default=str)}
+
+    def file_extension(self):
+        return ".json"
+
+
+class YamlRenderer(FormatRenderer):
+    """Renders export as YAML."""
+
+    def format_file(self, file_path, file_record, chunks, relationships, config):
+        data = _serialize_file_data(file_path, file_record, chunks, relationships, config)
+        return yaml.dump(data, default_flow_style=False, allow_unicode=True, sort_keys=False)
+
+    def generate_root_files(self, indexed_files, file_data):
+        root_data = {
+            "generated": datetime.now(timezone.utc).isoformat(),
+            "total_files": len(indexed_files),
+            "files": {
+                path: _serialize_file_data(
+                    path,
+                    data.get("record"),
+                    data.get("chunks", []),
+                    data.get("relationships", []),
+                    ExportConfig(),
+                )
+                for path, data in file_data.items()
+            },
+        }
+        return {"export.yaml": yaml.dump(root_data, default_flow_style=False, allow_unicode=True, sort_keys=False)}
+
+    def file_extension(self):
+        return ".yaml"
+
+
+def get_renderer(fmt: ExportFormat) -> FormatRenderer:
+    """Return the appropriate renderer for the given format."""
+    if fmt == ExportFormat.MARKDOWN:
+        return MarkdownRenderer()
+    elif fmt == ExportFormat.MARKDOWN_KV:
+        return MarkdownKVRenderer()
+    elif fmt == ExportFormat.JSON:
+        return JsonRenderer()
+    elif fmt == ExportFormat.YAML:
+        return YamlRenderer()
+    raise ValueError(f"Unknown format: {fmt}")
+
+
+def _format_kv_file(file_path, file_record, chunks, relationships, config):
+    """Generate compact KV markdown for a single file."""
+    lines = []
+
+    # File heading
+    lines.append(f"# {file_path}")
+    lines.append("")
+
+    # File metadata as key-value pairs
+    if file_record:
+        lang_val = file_record.language.value if hasattr(file_record.language, 'value') else str(file_record.language)
+        lines.append(f"language: {lang_val}")
+        lines.append(f"last_indexed: {file_record.last_indexed}")
+        lines.append(f"chunk_count: {file_record.chunk_count}")
+    lines.append("")
+
+    # File summary
+    if file_record and hasattr(file_record, 'file_summary') and file_record.file_summary:
+        lines.append(f"summary: {file_record.file_summary}")
+    else:
+        rule_summary = generate_rule_summary(file_path, chunks, relationships)
+        lines.append(f"summary: {rule_summary}")
+    lines.append("")
+
+    # Per-chunk sections
+    for chunk in chunks:
+        lines.append(f"## {chunk.name}")
+        lines.append("")
+        lines.append(f"type: {chunk.chunk_type.value}")
+        lines.append(f"lines: L{chunk.start_line}-L{chunk.end_line}")
+
+        if chunk.summary:
+            lines.append(f"summary: {chunk.summary}")
+
+        if config.include_code:
+            lang_hint = ""
+            if file_path.endswith(".py"):
+                lang_hint = "python"
+            elif file_path.endswith(".c") or file_path.endswith(".h"):
+                lang_hint = "c"
+            lines.append("")
+            lines.append(f"```{lang_hint}")
+            lines.append(chunk.content)
+            lines.append("```")
+
+        # Relationships as flat comma-separated
+        chunk_rels = [r for r in relationships if r.get("source_id") == chunk.id]
+        outgoing_by_type: dict[str, list[str]] = {}
+        for r in chunk_rels:
+            rt = r.get("rel_type", "unknown")
+            target = r.get("target_name_resolved", r.get("target_name", "?"))
+            if r.get("source_id") == r.get("target_id"):
+                target = f"? ({r.get('target_name', 'unknown')})"
+            outgoing_by_type.setdefault(rt, []).append(target)
+
+        for rt, targets in outgoing_by_type.items():
+            lines.append(f"{rt}: {', '.join(targets)}")
+
+        lines.append("")
+
+    return "\n".join(lines)
+
+
+def _generate_codebase_md(indexed_files, file_data):
+    """Generate consolidated CODEBASE.md merging index + architecture + relationships."""
+    lines = []
+
+    lines.append("# Codebase")
+    lines.append("")
+    lines.append(f"generated: {datetime.now(timezone.utc).isoformat()}")
+    lines.append(f"total_files: {len(indexed_files)}")
+    total_chunks = sum(len(d.get("chunks", [])) for d in file_data.values())
+    lines.append(f"total_chunks: {total_chunks}")
+    lines.append("")
+
+    # Statistics as KV
+    all_chunks = []
+    for d in file_data.values():
+        all_chunks.extend(d.get("chunks", []))
+    func_count = sum(1 for c in all_chunks if c.chunk_type == ChunkType.FUNCTION)
+    class_count = sum(1 for c in all_chunks if c.chunk_type == ChunkType.CLASS)
+    method_count = sum(1 for c in all_chunks if c.chunk_type == ChunkType.METHOD)
+    lines.append(f"functions: {func_count}")
+    lines.append(f"classes: {class_count}")
+    lines.append(f"methods: {method_count}")
+    lines.append("")
+
+    # Module grouping
+    modules = _group_by_module(file_data)
+    lines.append(f"## Modules ({len(modules)})")
+    lines.append("")
+    for module_name, file_paths in modules.items():
+        lines.append(f"### {module_name}")
+        lines.append("")
+        for fp in file_paths:
+            data = file_data[fp]
+            chunks = data.get("chunks", [])
+            summary = data.get("summary", "")
+            short = summary[:100] + "..." if len(summary) > 100 else summary
+            lines.append(f"{fp}: {len(chunks)} chunks - {short}")
+        lines.append("")
+
+    # Entry points
+    entry_points = _detect_entry_points(file_data)
+    if entry_points:
+        lines.append("## Entry Points")
+        lines.append("")
+        for ep in entry_points:
+            chunks_str = ", ".join(ep["chunk_names"][:5]) or "none"
+            lines.append(f"{ep['path']}: {ep['method']} ({chunks_str})")
+        lines.append("")
+
+    # Key interfaces
+    key_interfaces = _compute_key_interfaces(file_data)
+    if key_interfaces:
+        lines.append("## Key Interfaces")
+        lines.append("")
+        for iface in key_interfaces:
+            summary_part = f" - {iface['summary'][:60]}" if iface['summary'] else ""
+            lines.append(f"{iface['name']} ({iface['type']}, {iface['file']}): used by {iface['used_by_count']} files{summary_part}")
+        lines.append("")
+
+    # Cross-file dependencies
+    lines.append("## Dependencies")
+    lines.append("")
+    for path in sorted(file_data.keys()):
+        rels = file_data[path].get("relationships", [])
+        chunks = file_data[path].get("chunks", [])
+        chunk_ids = {c.id for c in chunks}
+
+        imports_from: set[str] = set()
+        calls_to: set[str] = set()
+        imported_by: set[str] = set()
+        called_by: set[str] = set()
+
+        for rel in rels:
+            if rel.get("direction") == "incoming":
+                src_id = rel.get("source_id", "")
+                src_file = src_id.split("::")[0] if "::" in src_id else ""
+                if src_file and src_file != path:
+                    if rel.get("rel_type") == "imports":
+                        imported_by.add(src_file)
+                    elif rel.get("rel_type") == "calls":
+                        called_by.add(src_file)
+            else:
+                target_id = rel.get("target_id", "")
+                target_file = target_id.split("::")[0] if "::" in target_id else ""
+                if target_file and target_file != path and target_id not in chunk_ids:
+                    if rel.get("rel_type") == "imports":
+                        imports_from.add(target_file)
+                    elif rel.get("rel_type") == "calls":
+                        calls_to.add(target_file)
+
+        if imports_from or calls_to or imported_by or called_by:
+            lines.append(f"### {path}")
+            lines.append("")
+            if imports_from:
+                lines.append(f"imports: {', '.join(sorted(imports_from))}")
+            if imported_by:
+                lines.append(f"imported_by: {', '.join(sorted(imported_by))}")
+            if calls_to:
+                lines.append(f"calls: {', '.join(sorted(calls_to))}")
+            if called_by:
+                lines.append(f"called_by: {', '.join(sorted(called_by))}")
+            lines.append("")
+
+    # Per-file index
+    lines.append("## Files")
+    lines.append("")
+    for path in sorted(indexed_files.keys()):
+        data = file_data.get(path, {})
+        record = data.get("record")
+        chunks = data.get("chunks", [])
+        lang = record.language.value if record and hasattr(record, "language") else "?"
+
+        if record and hasattr(record, 'file_summary') and record.file_summary:
+            summary = record.file_summary
+        else:
+            ai_summaries = [c.summary for c in chunks if c.summary]
+            summary = "; ".join(ai_summaries) if ai_summaries else data.get("summary", "")
+
+        lines.append(f"### {path}")
+        lines.append("")
+        lines.append(f"language: {lang}")
+        lines.append(f"chunks: {len(chunks)}")
+        lines.append(f"summary: {summary}")
+        lines.append("")
+
+    return "\n".join(lines)
+
+
+class MarkdownKVRenderer(FormatRenderer):
+    """Renders compact key-value markdown format (LLM-friendly default)."""
+
+    def format_file(self, file_path, file_record, chunks, relationships, config):
+        return _format_kv_file(file_path, file_record, chunks, relationships, config)
+
+    def generate_root_files(self, indexed_files, file_data):
+        return {
+            "CODEBASE.md": _generate_codebase_md(indexed_files, file_data),
+        }
+
+    def file_extension(self):
+        return ".md"
 
 
 
@@ -861,35 +1234,37 @@ def export_index(
             "summary": summary,
         }
 
-    # Generate per-file export markdown
+    # Select renderer based on format
+    renderer = get_renderer(config.format)
+    ext = renderer.file_extension()
+
+    # Generate per-file exports
     file_exports: dict[str, str] = {}
     for file_path, data in file_data.items():
-        export_md = _format_export_file(
+        export_content = renderer.format_file(
             file_path,
             data["record"],
             data["chunks"],
             data["relationships"],
             config,
         )
-        file_exports[file_path] = export_md
+        file_exports[file_path] = export_content
 
     # Generate root files
-    index_md = generate_index_md(indexed_files, file_data)
-    rels_md = generate_relationships_md(file_data)
-    arch_md = generate_architecture_md(file_data)
+    root_files = renderer.generate_root_files(indexed_files, file_data)
 
     # Determine output mode
     output = config.output_path or "glma-export"
 
     if output == "-":
         # Stdout mode: stream tar to stdout
-        _write_tar_to_stream(sys.stdout.buffer, file_exports, index_md, rels_md, arch_md)
+        _write_tar_to_stream(sys.stdout.buffer, file_exports, root_files, ext)
         return Path("-")
     elif output.endswith(".tar.gz") or output.endswith(".tgz"):
         # Archive mode
         output_path = Path(output)
         with open(output_path, "wb") as f:
-            _write_tar_to_stream(f, file_exports, index_md, rels_md, arch_md)
+            _write_tar_to_stream(f, file_exports, root_files, ext)
         if console:
             console.print(f"[green]✓[/green] Exported to {output_path}")
         return output_path
@@ -897,7 +1272,7 @@ def export_index(
         # Directory mode
         output_dir = Path(output)
         output_dir.mkdir(parents=True, exist_ok=True)
-        _write_files_to_dir(output_dir, file_exports, index_md, rels_md, arch_md)
+        _write_files_to_dir(output_dir, file_exports, root_files, ext)
         if console:
             console.print(f"[green]✓[/green] Exported to {output_dir}/")
         return output_dir
@@ -906,74 +1281,53 @@ def export_index(
 def _write_files_to_dir(
     output_dir: Path,
     file_exports: dict[str, str],
-    index_md: str,
-    rels_md: str,
-    arch_md: str,
+    root_files: dict[str, str],
+    file_ext: str = ".md",
 ) -> None:
     """Write export files to a directory.
 
     Args:
         output_dir: Target directory.
-        file_exports: Dict of {relative_path: markdown_content}.
-        index_md: INDEX.md content.
-        rels_md: RELATIONSHIPS.md content.
-        arch_md: ARCHITECTURE.md content.
+        file_exports: Dict of {relative_path: content}.
+        root_files: Dict of {filename: content} for root-level files.
+        file_ext: File extension for per-file exports.
     """
     # Write per-file exports
     for file_path, content in file_exports.items():
-        # Create nested mirror structure: export/src/auth/login.py.md
-        md_path = output_dir / (file_path + ".md")
+        md_path = output_dir / (file_path + file_ext)
         md_path.parent.mkdir(parents=True, exist_ok=True)
         md_path.write_text(content, encoding="utf-8")
 
-    # Write INDEX.md
-    (output_dir / "INDEX.md").write_text(index_md, encoding="utf-8")
-
-    # Write RELATIONSHIPS.md
-    (output_dir / "RELATIONSHIPS.md").write_text(rels_md, encoding="utf-8")
-
-    # Write ARCHITECTURE.md
-    (output_dir / "ARCHITECTURE.md").write_text(arch_md, encoding="utf-8")
+    # Write root files
+    for name, content in root_files.items():
+        (output_dir / name).write_text(content, encoding="utf-8")
 
 
 def _write_tar_to_stream(
     stream: io.RawIOBase,
     file_exports: dict[str, str],
-    index_md: str,
-    rels_md: str,
-    arch_md: str,
+    root_files: dict[str, str],
+    file_ext: str = ".md",
 ) -> None:
     """Write export as tar.gz archive to a stream.
 
     Args:
         stream: Writable binary stream (file or stdout.buffer).
-        file_exports: Dict of {relative_path: markdown_content}.
-        index_md: INDEX.md content.
-        rels_md: RELATIONSHIPS.md content.
-        arch_md: ARCHITECTURE.md content.
+        file_exports: Dict of {relative_path: content}.
+        root_files: Dict of {filename: content} for root-level files.
+        file_ext: File extension for per-file exports.
     """
     with tarfile.open(fileobj=stream, mode="w|gz") as tar:
         # Add per-file exports
         for file_path, content in file_exports.items():
             data = content.encode("utf-8")
-            info = tarfile.TarInfo(name=file_path + ".md")
+            info = tarfile.TarInfo(name=file_path + file_ext)
             info.size = len(data)
             tar.addfile(info, io.BytesIO(data))
 
-        # Add INDEX.md
-        data = index_md.encode("utf-8")
-        info = tarfile.TarInfo(name="INDEX.md")
-        info.size = len(data)
-        tar.addfile(info, io.BytesIO(data))
-
-        # Add RELATIONSHIPS.md
-        data = rels_md.encode("utf-8")
-        info = tarfile.TarInfo(name="RELATIONSHIPS.md")
-        info.size = len(data)
-        tar.addfile(info, io.BytesIO(data))
-
-        # Add ARCHITECTURE.md
-        data = arch_md.encode("utf-8")
-        info = tarfile.TarInfo(name="ARCHITECTURE.md")
-        info.size = len(data)
-        tar.addfile(info, io.BytesIO(data))
+        # Add root files
+        for name, content in root_files.items():
+            data = content.encode("utf-8")
+            info = tarfile.TarInfo(name=name)
+            info.size = len(data)
+            tar.addfile(info, io.BytesIO(data))
