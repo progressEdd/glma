@@ -118,6 +118,11 @@ class SummarizeConfig(BaseModel):
         default="http://localhost:1234/v1",
         description="OpenAI-compatible API base URL (used by local provider)",
     )
+    max_chunk_chars: int = Field(
+        default=3000,
+        ge=100,
+        description="Max chars per chunk before decomposition triggers. Chunks exceeding this are decomposed (class→method summaries→compose, or map-reduce for standalone chunks). Default 3000 ≈ 750 tokens.",
+    )
 
 
 class ExportConfig(BaseModel):
