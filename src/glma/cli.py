@@ -59,6 +59,11 @@ def index(
         "--summarize-model",
         help="Model name for summarization (e.g., 'llama3', 'codellama').",
     ),
+    max_chunk_chars: Optional[int] = typer.Option(
+        None,
+        "--max-chunk-chars",
+        help="Max chars per chunk for summarization (default: 3000). Triggers decomposition if exceeded.",
+    ),
 ) -> None:
     """Index a repository's source files into the glma database."""
     from glma.config import load_config
@@ -107,6 +112,8 @@ def index(
             summarize_overrides["provider"] = summarize_provider
         if summarize_model:
             summarize_overrides["model"] = summarize_model
+        if max_chunk_chars is not None:
+            summarize_overrides["max_chunk_chars"] = max_chunk_chars
 
         summ_cfg = load_summarize_config(repo_path, summarize_overrides)
 
