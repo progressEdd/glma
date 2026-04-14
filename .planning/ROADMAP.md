@@ -1,85 +1,74 @@
-# Roadmap: glma v1.1 — Polish & Complete
+# Roadmap: glma v1.2 — Robustness & Export Formats
 
 ## Overview
 
-Close all v1.0 gaps — fix known bugs, complete unfinished features, and ship per-chunk AI summarization persisted to the database. Three trivial bug fixes, a new summarization pipeline with pluggable providers, and ARCHITECTURE.md generation for exports.
+Make summarization robust for real-world codebases (large chunks, any context window size) and add a compact markdown key-value export format as the new default. Three focused phases: one bug fix, one new feature, one architectural integration.
 
 ## Phases
 
 **Phase Numbering:**
-- Continues from v1.0 (Phases 1-4)
-- v1.1 starts at Phase 5
+- Continues from v1.1 (Phases 5-9)
+- v1.2 starts at Phase 10
 
-- [x] **Phase 5: Bug Fixes** - Fix export default, notebook truncation, stale placeholder
-- [x] **Phase 6: Summarization Infrastructure** - Provider protocol, DB update method, summarization pipeline
-- [x] **Phase 7: CLI Integration & Providers** - Wire up CLI flags, implement OpenAI-compatible and pi providers
-- [x] **Phase 9: Notebook Cell Summarization** - Wire LLM summarization into notebook query path with cell-level caching
+- [x] **Phase 10: Chunk Truncation for Summarization** - Handle oversized chunks that exceed model context windows
+- [ ] **Phase 11: Markdown Key-Value Export Format** - New default export format with multi-format support
+- [ ] **Phase 12: Pi Agent Integration** - Pi extension for summarization with model hint resolution
 
 ## Phase Details
 
-### Phase 5: Bug Fixes
-**Goal**: All three v1.0 bugs fixed — export defaults to summaries-only, notebook cells preserve comprehensions, writer output no longer shows stale placeholder
-**Depends on**: Phase 4 (v1.0 complete)
-**Requirements**: FIX-01, FIX-02, FIX-03
+### Phase 10: Chunk Truncation for Summarization
+**Goal**: `glma index --summarize` completes without errors regardless of chunk sizes or model context window
+**Depends on**: v1.1 complete (Phase 7 summarization pipeline)
+**Requirements**: TRUNC-01
 **Success Criteria** (what must be TRUE):
-  1. Running `glma export` without `--no-code` produces markdown with signatures/summaries only (no full source code) — ExportConfig.include_code defaults to False
-  2. Querying a Jupyter notebook containing list/dict/set comprehensions shows the full comprehension expression in the cell source — no truncation
-  3. Running `glma index` produces per-file markdown where the file summary section shows the rule-based summary text, not "*(File summary not yet generated — available after Phase 3.)*"
-  4. All 211 existing tests still pass after changes
+  1. Chunks exceeding a configurable character limit are truncated before being sent to the summarization provider
+  2. Truncated chunks still receive a valid summary (covering their first N characters)
+  3. A warning is logged when truncation occurs, including chunk ID and original vs truncated size
+  4. The truncation threshold defaults to 3000 characters (~750 tokens) and is configurable via `.glma.toml` `[summarize] max_chunk_chars`
+  5. A full summarization run against a large codebase (e.g., ag2-framework) completes without 400 errors
+  6. All 274 existing tests still pass
 
-### Phase 6: Summarization Infrastructure
-**Goal**: Core summarization pipeline exists — provider protocol, LadybugStore update method, summarize_chunks function — ready for CLI wiring
-**Depends on**: Phase 5 (bug fixes done, clean baseline)
-**Requirements**: SUMM-01, SUMM-02, PROV-01
+### Phase 11: Markdown Key-Value Export Format
+**Goal**: `glma export` outputs a compact, LLM-friendly key-value markdown format by default, with option to select other formats
+**Depends on**: v1.1 complete (Phase 8 export infrastructure)
+**Requirements**: KV-01, KV-02
 **Success Criteria** (what must be TRUE):
-  1. `SummarizerProvider` protocol exists with `summarize(code: str, context: str) -> str` method
-  2. `LadybugStore.update_chunk_summary(chunk_id, summary)` can update a single chunk's summary without deleting/recreating all chunks for the file
-  3. `summarize_chunks(store, chunks, provider)` processes chunks, calls provider, writes summaries to DB, and returns updated chunks
-  4. Re-indexing a file preserves existing summaries where content_hash hasn't changed (summaries survive upsert_chunks)
-  5. Only chunks with NULL/empty summary are processed — already-summarized chunks are skipped
-  6. Unit tests verify: provider protocol, DB update, incremental skip logic
+  1. `glma export` without format flag outputs markdown-kv format (hierarchical headings, `key: value` pairs)
+  2. `--format markdown` produces the current table-based format (backward compatible)
+  3. `--format json` produces raw JSON export
+  4. `--format yaml` produces YAML export
+  5. All export output files (INDEX.md, ARCHITECTURE.md, RELATIONSHIPS.md, per-file .md) respect the selected format
+  6. `ExportFormat` enum exists in models.py with values: `markdown_kv`, `markdown`, `json`, `yaml`
+  7. Existing `--format` flag alias `-f` works
+  8. All existing tests pass; new tests cover each format
 
-### Phase 7: CLI Integration & Providers
-**Goal**: Users can run `glma index --summarize` to generate per-chunk AI summaries, with configurable providers (local OpenAI-compatible or pi agent)
-**Depends on**: Phase 6 (pipeline infrastructure in place)
-**Requirements**: SUMM-03, PROV-02, PROV-03, PROV-04
+### Phase 12: Pi Agent Integration
+**Goal**: Pi extension can generate summaries using pi's model registry — no separate LLM server needed
+**Depends on**: Phase 10 (robust summarization), Phase 11 (export format stable)
+**Requirements**: PI-01, PI-02
 **Success Criteria** (what must be TRUE):
-  1. `glma index --summarize` runs the summarization pass after indexing, populating chunk.summary in the DB
-  2. `--summarize-provider local` uses OpenAI-compatible API (Ollama, LM Studio, llama.cpp) — works with any base_url
-  3. `--summarize-provider pi` uses pi's API for summarization
-  4. `.glma.toml` supports `[summarize]` section with `enabled`, `provider`, `model`, `base_url` fields
-  5. After summarization, `glma export` output includes per-chunk AI summaries in the markdown
-  6. After summarization, `glma query <file>` output includes chunk summaries
-  7. openai remains an optional dependency (`pip install glma[ai]`); non-AI installs still work
-  8. Summaries appear in writer markdown output (per-file .md in .glma-index/)
-
-### Phase 8: ARCHITECTURE.md & Export Polish *(COMPLETE)*
-**Goal**: Exports include a codebase-level ARCHITECTURE.md derived from relationship data and summaries
-**Depends on**: Phase 7
-**Result**: All 3 tasks implemented, 27 export tests passing
-
-### Phase 9: Notebook Cell Summarization
-**Goal**: `glma query notebook.ipynb --summarize` generates per-cell AI summaries shown in compacted markdown output, with content-hash-based caching to avoid redundant LLM calls
-**Depends on**: Phase 7 (summarization providers exist)
-**Requirements**: NSUMM-01, NSUMM-02, NSUMM-03
-**Success Criteria** (what must be TRUE):
-  1. `glma query notebook.ipynb --summarize` produces compacted markdown with per-cell LLM summaries as blockquote lines
-  2. `--summarize` with no provider defaults to local OpenAI-compatible provider (same as `glma index --summarize`)
-  3. `--summarize-provider` and `--summarize-model` flags work for notebook queries
-  4. Summaries are cached in `.glma-index/notebook-cache/` keyed on cell content hash — unchanged cells are not re-summarized
-  5. Without `--summarize`, notebook query output is identical to current behavior (no regressions)
-  6. Empty or trivial cells (< 3 non-empty lines) are skipped during summarization
-  7. All existing tests pass; new tests cover cache logic, provider integration, and CLI flag handling
+  1. A pi extension exists at `~/.pi/agent/extensions/glma-summarize.ts` (or project-local)
+  2. Extension registers a `glma_summarize` tool that reads chunks needing summaries from glma DB
+  3. `model_hint` in `.glma.toml` resolves to an actual model via pi's registry (`fast` → cheapest, `capable` → strongest, exact ID → use that)
+  4. Summaries are written back to the glma database after generation
+  5. Fallback chain works: pi extension → local LLM endpoint → rule-based (no model)
+  6. Named provider presets work: `--ai-provider ollama`, `--ai-provider lmstudio`, etc. with correct default URLs
+  7. All existing tests pass
 
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 5 → 6 → 7 → 8
+Phases execute in numeric order: 10 → 11 → 12
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 5. Bug Fixes | 2/2 | Complete | 2026-04-10 |
-| 6. Summarization Infrastructure | 1/1 | Complete | 2026-04-10 |
-| 7. CLI Integration & Providers | 3/3 | Complete | 2026-04-10 |
-| 8. ARCHITECTURE.md & Export Polish | 1/1 | Complete | 2026-04-10 |
-| 9. Notebook Cell Summarization | 2/2 | Complete | 2026-04-11 |
+| 10. Chunk Truncation | 1/1 | ✓ Complete | 2026-04-14 |
+| 11. Markdown Key-Value Export | 0/? | Not started | |
+| 12. Pi Agent Integration | 0/? | Not started | |
+
+## Notes
+
+- Phase 10 is scoped from `.Complete/todos/Complete/2026-04-11-truncate-oversized-chunks-before-summarization.md`
+- Phase 11 is scoped from `.Complete/todos/Complete/2026-04-13-add-markdown-key-value-export-format.md`
+- Phase 12 is scoped from `.Complete/todos/Complete/2026-04-10-pi-agent-integration-for-summarization.md`
+- The stale todo `2026-04-10-per-chunk-ai-summaries-from-local-llm.md` should be resolved (Phase 9 already shipped notebook cell summarization)

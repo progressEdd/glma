@@ -95,6 +95,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | NSUMM-01 | Phase 9 | Complete |
 | NSUMM-02 | Phase 9 | Complete |
 | NSUMM-03 | Phase 9 | Complete |
+| TRUNC-01 | Phase 10 | Complete |
 
 **Coverage:**
 - v1.1 requirements: 11 total
