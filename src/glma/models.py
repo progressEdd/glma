@@ -60,6 +60,14 @@ class Confidence(str, Enum):
     INFERRED = "INFERRED"
 
 
+class ExportFormat(str, Enum):
+    """Supported export output formats."""
+    MARKDOWN_KV = "markdown-kv"
+    MARKDOWN = "markdown"
+    JSON = "json"
+    YAML = "yaml"
+
+
 class Relationship(BaseModel):
     """A structural relationship between two code chunks."""
     source_id: str = Field(..., description="Chunk ID of the source")
@@ -75,7 +83,10 @@ class QueryConfig(BaseModel):
     verbose: bool = Field(default=False, description="Include full code bodies")
     depth: int = Field(default=1, ge=1, le=10, description="Relationship traversal depth")
     no_relationships: bool = Field(default=False, description="Skip dependency section")
-    output_format: str = Field(default="markdown", description="Output format: 'markdown' or 'json'")
+    output_format: ExportFormat = Field(
+        default=ExportFormat.MARKDOWN,
+        description="Output format: markdown-kv, markdown, json, yaml",
+    )
     rel_types: list[str] = Field(default_factory=list, description="Filter relationship types (empty = all)")
     summary_only: bool = Field(default=False, description="Show only file summary, skip signatures")
 
@@ -146,6 +157,10 @@ class ExportConfig(BaseModel):
     ai_model: str = Field(
         default="default",
         description="Model name for AI summaries",
+    )
+    format: ExportFormat = Field(
+        default=ExportFormat.MARKDOWN_KV,
+        description="Export output format: markdown-kv, markdown, json, yaml",
     )
 
 
