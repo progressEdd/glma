@@ -11,7 +11,7 @@ Make summarization robust for real-world codebases (large chunks, any context wi
 - v1.2 starts at Phase 10
 
 - [x] **Phase 10: Chunk Truncation for Summarization** - Handle oversized chunks that exceed model context windows
-- [ ] **Phase 11: Markdown Key-Value Export Format** - New default export format with multi-format support
+- [x] **Phase 11: Markdown Key-Value Export Format** - New default export format with multi-format support
 - [ ] **Phase 12: Pi Agent Integration** - Pi extension for summarization with model hint resolution
 
 ## Phase Details
@@ -63,7 +63,7 @@ Phases execute in numeric order: 10 → 11 → 12
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 10. Chunk Truncation | 1/1 | ✓ Complete | 2026-04-14 |
-| 11. Markdown Key-Value Export | 0/? | Not started | |
+| 11. Markdown Key-Value Export | 0/? | Complete    | 2026-04-14 |
 | 12. Pi Agent Integration | 0/? | Not started | |
 
 ## Notes
