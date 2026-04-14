@@ -213,7 +213,7 @@ def query(
     verbose: bool = typer.Option(False, "--verbose", "-V", help="Include full code bodies."),
     depth: int = typer.Option(1, "--depth", "-d", help="Relationship traversal depth (1-10)."),
     no_relationships: bool = typer.Option(False, "--no-relationships", help="Skip dependency section."),
-    output_format: str = typer.Option("markdown", "--format", "-f", help="Output format: markdown, json."),
+    output_format: str = typer.Option("markdown", "--format", "-f", help="Output format: markdown-kv, markdown, json, yaml."),
     rel_types: Optional[str] = typer.Option(None, "--rel-types", help="Comma-separated relationship types to show."),
     summary_only: bool = typer.Option(False, "--summary-only", help="Show only file summary."),
     output: Optional[str] = typer.Option(None, "--output", "-o", help="Output file path (default: stdout)."),
@@ -238,8 +238,12 @@ def query(
 ) -> None:
     """Query an indexed file and output compacted markdown."""
     # Validate flags
-    if output_format not in ("markdown", "json"):
-        sys.stderr.write("Error: format must be 'markdown' or 'json'\n")
+    from glma.models import ExportFormat
+    try:
+        fmt = ExportFormat(output_format)
+    except ValueError:
+        valid = ", ".join(f.value for f in ExportFormat)
+        sys.stderr.write(f"Error: format must be one of: {valid}\n")
         raise typer.Exit(4)
     if depth < 1 or depth > 10:
         sys.stderr.write("Error: depth must be between 1 and 10\n")
@@ -365,9 +369,16 @@ def query(
         all_rels_flat = flat_rels
 
     # Format output
-    if cfg.output_format == "json":
+    from glma.models import ExportFormat as EF
+    if cfg.output_format == EF.JSON:
         from glma.query.formatter import format_json_output
         output_text = format_json_output(filepath, file_record, chunks, all_rels_flat, verbose=cfg.verbose)
+    elif cfg.output_format == EF.YAML:
+        from glma.query.formatter import format_yaml_output
+        output_text = format_yaml_output(filepath, file_record, chunks, all_rels_flat, verbose=cfg.verbose)
+    elif cfg.output_format == EF.MARKDOWN_KV:
+        from glma.query.formatter import format_kv_output
+        output_text = format_kv_output(filepath, file_record, chunks, relationships, query_config=cfg)
     else:
         from glma.query.formatter import format_compact_output
         output_text = format_compact_output(filepath, file_record, chunks, relationships, query_config=cfg)
@@ -436,6 +447,12 @@ def export(
         "--include-code",
         help="Include full source code in export (default: signatures only).",
     ),
+    format: str = typer.Option(
+        "markdown-kv",
+        "--format",
+        "-f",
+        help="Export format: markdown-kv, markdown, json, yaml.",
+    ),
     config_file: Optional[Path] = typer.Option(
         None,
         "--config",
@@ -461,6 +478,16 @@ def export(
         export_overrides["ai_summaries"] = True
     if include_code:
         export_overrides["include_code"] = True
+
+    # Validate and set format
+    from glma.models import ExportFormat
+    try:
+        export_format = ExportFormat(format)
+    except ValueError:
+        valid = ", ".join(f.value for f in ExportFormat)
+        console.print(f"[red]Error:[/red] Invalid format '{format}'. Must be one of: {valid}")
+        raise typer.Exit(4)
+    export_overrides["format"] = export_format
 
     export_config = load_export_config(repo_path, export_overrides)
 
