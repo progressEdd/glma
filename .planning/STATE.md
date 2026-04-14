@@ -1,17 +1,17 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.1
+milestone: v1.2
 milestone_name: milestone
-status: completed
-stopped_at: Milestone v1.1 complete — all phases shipped
-last_updated: "2026-04-13T16:51:59.264Z"
-last_activity: 2026-04-11 - Phase 9 complete
+status: active
+stopped_at: ""
+last_updated: "2026-04-14T00:00:00.000Z"
+last_activity: 2026-04-14 - v1.2 milestone created
 progress:
-  total_phases: 5
-  completed_phases: 5
-  total_plans: 7
-  completed_plans: 9
-  percent: 100
+  total_phases: 3
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
@@ -21,51 +21,55 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-10)
 
 **Core value:** Agents can call a single command and get exactly the code context they need to implement features — no grepping, no raw file parsing, no guesswork.
-**Current focus:** v1.1 complete — all phases shipped
+**Current focus:** v1.2 — robustness & export formats
 
 ## Current Position
 
-Phase: 09 of 5 (notebook cell summarization)
-Plan: 2 of 2
-Status: Milestone complete
-Last activity: 2026-04-11 - Phase 9 complete
+Phase: 10 of 3 (chunk truncation for summarization)
+Plan: 0 of 0
+Status: Milestone active
+Last activity: 2026-04-14 - v1.2 milestone created
 
-Progress: [██████████] 100% (complete)
+Progress: [          ] 0% (starting)
 
-## v1.1 Summary
+## v1.2 Summary
 
-**Shipped:** 5 phases (5-9), 9 plans, 270 tests
+**Goal:** Make summarization robust for real-world codebases and add compact key-value export format
+
 **Phases:**
 
-- Phase 5: Bug Fixes (export defaults, notebook truncation, stale placeholder)
-- Phase 6: Summarization Infrastructure (provider protocol, DB update, pipeline)
-- Phase 7: CLI Integration & Providers (OpenAI-compatible, pi provider, CLI flags)
-- Phase 8: ARCHITECTURE.md & Export Polish (architecture overview, export integration)
-- Phase 9: Notebook Cell Summarization (cell cache, provider integration, CLI flags)
+- Phase 10: Chunk Truncation for Summarization (handle oversized chunks, configurable limits)
+- Phase 11: Markdown Key-Value Export Format (new default format, multi-format support)
+- Phase 12: Pi Agent Integration (pi extension, model hints, provider presets)
+
+## Prior Milestones
+
+### v1.1 — Polish & Complete (completed 2026-04-11)
+- 5 phases (5-9), 9 plans, 274 tests
+- Bug fixes, summarization infrastructure, CLI providers, ARCHITECTURE.md, notebook cell summarization
+
+### v1.0 — Initial Release (completed 2026-04-10)
+- 4 phases, 12 plans, 211 tests
+- Core indexing, relationships, query/notebooks, watching/export
 
 ## Performance Metrics
 
-**Velocity (v1.0):**
+**Velocity (v1.1):**
+- Total plans completed: 9
+- Phases: 5-9
+- Total execution: ~4 hours across 2 days
 
+**Velocity (v1.0):**
 - Total plans completed: 12
 - Average duration: ~15 minutes per plan
 - Total execution time: ~3.5 hours
-
-**By Phase:**
-
-| Phase | Plans | Total  | Avg/Plan |
-| ----- | ----- | ------ | -------- |
-| 1     | 4     | ~1.5h  | ~25min   |
-| 2     | 3     | ~45min | ~15min   |
-| 3     | 3     | ~30min | ~10min   |
-| 4     | 2     | ~20min | ~10min   |
 
 ## Accumulated Context
 
 ### Decisions
 
 Decisions are logged in PROJECT.md Key Decisions table.
-Key decisions from v1.0 carried forward:
+Key decisions from v1.0/v1.1 carried forward:
 
 - Ladybug (real_ladybug) for graph storage
 - Tree-sitter for C + Python parsing
@@ -76,17 +80,20 @@ Key decisions from v1.0 carried forward:
 
 ### Resolved Todos
 
-- **Notebook cell AI summarization** — resolved in Phase 9 (NotebookCache + provider integration)
+- **Notebook cell AI summarization** — resolved in Phase 9
 - **Generate codebase architecture summary file** — resolved in Phase 8
+- **Per-chunk AI summaries from local LLM** — resolved in Phase 9 (notebook cells) + Phase 6-7 (source files)
 
-### Remaining (v2)
+### Remaining (future)
 
-- **Pi/agent integration for summarization** — full pi extension with model_hint resolution not built
-- **C duplicate chunk IDs** — deferred to v2
+- **Semantic search layer** on top of graph relationships
+- **Extended language support** (C++, TypeScript, Rust)
+- **MCP server interface** for direct agent integration
+- **C duplicate chunk IDs** — deferred (debug/2026-04-10-c-duplicate-chunk-ids.md)
 
 ### Open Debug Items
 
-- **C duplicate chunk IDs** (`debug/2026-04-10-c-duplicate-chunk-ids.md`) — deferred to v2
+- **C duplicate chunk IDs** (`debug/2026-04-10-c-duplicate-chunk-ids.md`) — deferred to future
 
 ### Blockers/Concerns
 
@@ -94,6 +101,6 @@ Key decisions from v1.0 carried forward:
 
 ## Session Continuity
 
-Last session: 2026-04-11
-Stopped at: Milestone v1.1 complete — all phases shipped
-Resume file: N/A — milestone complete
+Last session: 2026-04-14
+Stopped at: v1.2 milestone created, ready to begin Phase 10
+Resume with: `/gsd-start`
