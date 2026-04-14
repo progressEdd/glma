@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from glma.models import Chunk, ChunkType, ExportConfig
+from glma.models import Chunk, ChunkType, ExportConfig, ExportFormat
 from glma.export import (
     generate_rule_summary,
     generate_index_md,
@@ -14,6 +14,11 @@ from glma.export import (
     generate_architecture_md,
     _format_export_file,
     _write_files_to_dir,
+    get_renderer,
+    MarkdownKVRenderer,
+    JsonRenderer,
+    YamlRenderer,
+    MarkdownRenderer,
 )
 
 
@@ -187,7 +192,7 @@ class TestDirectoryOutput:
             "src/auth/login.py": "# login.py\n",
             "src/main.c": "# main.c\n",
         }
-        _write_files_to_dir(tmp_path, file_exports, "# Index", "# Rels", "# Arch")
+        _write_files_to_dir(tmp_path, file_exports, {"INDEX.md": "# Index", "RELATIONSHIPS.md": "# Rels", "ARCHITECTURE.md": "# Arch"})
 
         assert (tmp_path / "src" / "auth" / "login.py.md").exists()
         assert (tmp_path / "src" / "main.c.md").exists()
@@ -197,7 +202,7 @@ class TestDirectoryOutput:
 
     def test_file_content_correct(self, tmp_path):
         file_exports = {"test.py": "# Hello World\n"}
-        _write_files_to_dir(tmp_path, file_exports, "# Index", "# Rels", "# Arch")
+        _write_files_to_dir(tmp_path, file_exports, {"INDEX.md": "# Index", "RELATIONSHIPS.md": "# Rels", "ARCHITECTURE.md": "# Arch"})
 
         content = (tmp_path / "test.py.md").read_text()
         assert "# Hello World" in content
@@ -448,7 +453,178 @@ class TestGenerateArchitectureMd:
     def test_architecture_md_in_directory_output(self, tmp_path):
         """ARCHITECTURE.md is written to directory output."""
         file_exports = {"test.py": "# Hello\n"}
-        _write_files_to_dir(tmp_path, file_exports, "# Index", "# Rels", "# Arch")
+        _write_files_to_dir(tmp_path, file_exports, {"INDEX.md": "# Index", "RELATIONSHIPS.md": "# Rels", "ARCHITECTURE.md": "# Arch"})
 
         assert (tmp_path / "ARCHITECTURE.md").exists()
         assert (tmp_path / "ARCHITECTURE.md").read_text() == "# Arch"
+
+
+class TestMarkdownKVRenderer:
+    """Tests for MarkdownKVRenderer."""
+
+    def test_kv_file_basic_structure(self):
+        """KV file has heading + key-value metadata."""
+        renderer = MarkdownKVRenderer()
+        chunks = [_make_chunk("my_func")]
+        config = ExportConfig(format=ExportFormat.MARKDOWN_KV)
+        md = renderer.format_file("src/test.py", None, chunks, [], config)
+        assert "# src/test.py" in md
+        assert "## my_func" in md
+        assert "type: function" in md
+        assert "lines: L1-L10" in md
+
+    def test_kv_file_with_record(self):
+        """KV file includes file metadata from record."""
+        from glma.models import FileRecord, Language
+        renderer = MarkdownKVRenderer()
+        chunks = [_make_chunk()]
+        record = FileRecord(path="src/test.py", language=Language.PYTHON, content_hash="abc",
+                           last_indexed="2026-04-14T00:00:00Z", chunk_count=1)
+        config = ExportConfig(format=ExportFormat.MARKDOWN_KV)
+        md = renderer.format_file("src/test.py", record, chunks, [], config)
+        assert "language: python" in md
+        assert "last_indexed: 2026-04-14T00:00:00Z" in md
+        assert "chunk_count: 1" in md
+
+    def test_kv_relationships_flat(self):
+        """KV relationships rendered as comma-separated targets."""
+        renderer = MarkdownKVRenderer()
+        chunks = [_make_chunk("caller")]
+        rels = [{
+            "source_id": chunks[0].id,
+            "source_name": "caller",
+            "rel_type": "calls",
+            "confidence": "DIRECT",
+            "source_line": 5,
+            "target_name": "func_a",
+            "target_id": "other::function::func_a::1",
+        }]
+        config = ExportConfig(format=ExportFormat.MARKDOWN_KV)
+        md = renderer.format_file("src/test.py", None, chunks, rels, config)
+        assert "calls: func_a" in md
+
+    def test_kv_code_included(self):
+        """KV format respects include_code."""
+        renderer = MarkdownKVRenderer()
+        chunks = [_make_chunk("my_func")]
+        config = ExportConfig(format=ExportFormat.MARKDOWN_KV, include_code=True)
+        md = renderer.format_file("src/test.py", None, chunks, [], config)
+        assert "```python" in md
+
+    def test_kv_root_generates_codebase_md(self):
+        """KV renderer generates CODEBASE.md as root file."""
+        renderer = MarkdownKVRenderer()
+        indexed_files = {"test.py": "hash1"}
+        file_data = {"test.py": {"chunks": [_make_chunk()], "summary": "Test file.", "record": None}}
+        root = renderer.generate_root_files(indexed_files, file_data)
+        assert "CODEBASE.md" in root
+        assert len(root) == 1
+
+    def test_kv_file_extension(self):
+        """KV renderer uses .md extension."""
+        renderer = MarkdownKVRenderer()
+        assert renderer.file_extension() == ".md"
+
+
+class TestJsonRenderer:
+    """Tests for JsonRenderer."""
+
+    def test_json_valid_output(self):
+        """JSON renderer produces valid JSON."""
+        import json
+        renderer = JsonRenderer()
+        chunks = [_make_chunk()]
+        config = ExportConfig(format=ExportFormat.JSON)
+        output = renderer.format_file("src/test.py", None, chunks, [], config)
+        parsed = json.loads(output)
+        assert parsed["path"] == "src/test.py"
+        assert len(parsed["chunks"]) == 1
+
+    def test_json_root_file(self):
+        """JSON renderer generates export.json root file."""
+        renderer = JsonRenderer()
+        indexed_files = {"test.py": "h"}
+        file_data = {"test.py": {"chunks": [], "summary": "", "record": None}}
+        root = renderer.generate_root_files(indexed_files, file_data)
+        assert "export.json" in root
+        assert len(root) == 1
+
+    def test_json_extension(self):
+        assert JsonRenderer().file_extension() == ".json"
+
+
+class TestYamlRenderer:
+    """Tests for YamlRenderer."""
+
+    def test_yaml_valid_output(self):
+        """YAML renderer produces valid YAML."""
+        import yaml
+        renderer = YamlRenderer()
+        chunks = [_make_chunk()]
+        config = ExportConfig(format=ExportFormat.YAML)
+        output = renderer.format_file("src/test.py", None, chunks, [], config)
+        parsed = yaml.safe_load(output)
+        assert parsed["path"] == "src/test.py"
+
+    def test_yaml_root_file(self):
+        renderer = YamlRenderer()
+        indexed_files = {"test.py": "h"}
+        file_data = {"test.py": {"chunks": [], "summary": "", "record": None}}
+        root = renderer.generate_root_files(indexed_files, file_data)
+        assert "export.yaml" in root
+
+    def test_yaml_extension(self):
+        assert YamlRenderer().file_extension() == ".yaml"
+
+
+class TestGetRenderer:
+    """Tests for renderer factory."""
+
+    def test_markdown_returns_markdown_renderer(self):
+        r = get_renderer(ExportFormat.MARKDOWN)
+        assert isinstance(r, MarkdownRenderer)
+
+    def test_kv_returns_kv_renderer(self):
+        r = get_renderer(ExportFormat.MARKDOWN_KV)
+        assert isinstance(r, MarkdownKVRenderer)
+
+    def test_json_returns_json_renderer(self):
+        r = get_renderer(ExportFormat.JSON)
+        assert isinstance(r, JsonRenderer)
+
+    def test_yaml_returns_yaml_renderer(self):
+        r = get_renderer(ExportFormat.YAML)
+        assert isinstance(r, YamlRenderer)
+
+
+class TestQueryYamlOutput:
+    """Tests for YAML query output."""
+
+    def test_yaml_output_valid(self):
+        import yaml
+        from glma.query.formatter import format_yaml_output
+        from glma.models import FileRecord, Language
+        record = FileRecord(path="test.py", language=Language.PYTHON, content_hash="h",
+                          last_indexed="2026-04-14T00:00:00Z", chunk_count=1)
+        chunks = [_make_chunk()]
+        output = format_yaml_output("test.py", record, chunks, [])
+        parsed = yaml.safe_load(output)
+        assert parsed["file"] == "test.py"
+        assert parsed["metadata"]["language"] == "python"
+
+
+class TestQueryKvOutput:
+    """Tests for KV query output."""
+
+    def test_kv_output_basic(self):
+        from glma.query.formatter import format_kv_output
+        from glma.models import FileRecord, Language, QueryConfig
+        record = FileRecord(path="test.py", language=Language.PYTHON, content_hash="h",
+                          last_indexed="2026-04-14T00:00:00Z", chunk_count=1)
+        chunks = [_make_chunk("my_func")]
+        output = format_kv_output("test.py", record, chunks, {}, query_config=QueryConfig())
+        assert "# test.py" in output
+        assert "language: python" in output
+        assert "## my_func" in output
+        assert "type: function" in output
+        assert "lines: L1-L10" in output
