@@ -64,7 +64,7 @@ Phases execute in numeric order: 10 → 11 → 12
 |-------|----------------|--------|-----------|
 | 10. Chunk Truncation | 1/1 | ✓ Complete | 2026-04-14 |
 | 11. Markdown Key-Value Export | 0/? | Complete    | 2026-04-14 |
-| 12. Pi Agent Integration | 0/? | Not started | |
+| 12. Pi Agent Integration | 0/2 | Planned | |
 
 ## Notes
 
