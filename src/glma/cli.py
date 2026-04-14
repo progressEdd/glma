@@ -141,7 +141,7 @@ def index(
         for file_path in sorted(indexed_files.keys()):
             chunks = store.get_chunks_for_file(file_path)
             if chunks:
-                summarize_chunks(store, chunks, provider)
+                summarize_chunks(store, chunks, provider, max_chunk_chars=summ_cfg.max_chunk_chars)
 
         # Generate file-level LLM summaries from chunk summaries
         if not cfg.quiet:

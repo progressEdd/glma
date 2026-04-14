@@ -191,16 +191,22 @@ def summarize_chunks(
     store: LadybugStore,
     chunks: list[Chunk],
     provider: Protocol,
+    max_chunk_chars: int = 3000,
 ) -> list[Chunk]:
     """Process chunks, generate AI summaries, and persist to database.
 
     Skips chunks that already have a non-empty summary (incremental mode).
+    When a chunk triggers a context-length error from the provider, attempts
+    decomposition: class chunks are summarized via their method children,
+    standalone chunks are summarized via map-reduce.
     Failed summarization calls are logged and skipped without aborting the pipeline.
 
     Args:
         store: LadybugStore instance for database updates.
         chunks: List of Chunk objects to summarize.
         provider: SummarizerProvider implementation.
+        max_chunk_chars: Character budget hint. Chunks exceeding this trigger
+            proactive logging. Actual hard limit is the provider's rejection.
 
     Returns:
         List of chunks with summaries populated (unchanged for skipped/failed chunks).
@@ -209,6 +215,13 @@ def summarize_chunks(
     summarized_count = 0
     skipped_count = 0
     failed_count = 0
+    decomposed_count = 0
+
+    # Build parent_id lookup for class decomposition
+    children_by_parent: dict[str, list[Chunk]] = {}
+    for c in chunks:
+        if c.parent_id:
+            children_by_parent.setdefault(c.parent_id, []).append(c)
 
     for chunk in chunks:
         # Skip chunks that already have a summary (incremental)
@@ -216,6 +229,13 @@ def summarize_chunks(
             skipped_count += 1
             updated.append(chunk)
             continue
+
+        # Log proactive warning for oversized chunks (advisory, not a cutoff)
+        if len(chunk.content) > max_chunk_chars:
+            logger.info(
+                "Large chunk detected: %s (%d chars, threshold: %d). Will attempt direct summarization first.",
+                chunk.id, len(chunk.content), max_chunk_chars,
+            )
 
         try:
             context = (
@@ -232,13 +252,77 @@ def summarize_chunks(
                 logger.warning("Provider returned empty summary for chunk %s", chunk.id)
                 failed_count += 1
         except Exception as e:
-            logger.warning("Summarization failed for chunk %s: %s", chunk.id, e)
-            failed_count += 1
+            # Check if this is a context-length error we can decompose
+            if _is_context_length_error(e):
+                logger.warning(
+                    "Context length error for chunk %s (%d chars). Attempting decomposition.",
+                    chunk.id, len(chunk.content),
+                )
+                summary = _attempt_decomposition(
+                    chunk, chunks, children_by_parent, store, provider,
+                )
+                if summary:
+                    store.update_chunk_summary(chunk.id, summary)
+                    chunk.summary = summary
+                    decomposed_count += 1
+                    logger.info("Decomposition succeeded for chunk %s", chunk.id)
+                else:
+                    logger.warning("Decomposition also failed for chunk %s. Skipping.", chunk.id)
+                    failed_count += 1
+            else:
+                logger.warning("Summarization failed for chunk %s: %s", chunk.id, e)
+                failed_count += 1
 
         updated.append(chunk)
 
     logger.info(
-        "Summarization complete: %d summarized, %d skipped, %d failed",
-        summarized_count, skipped_count, failed_count,
+        "Summarization complete: %d summarized, %d decomposed, %d skipped, %d failed",
+        summarized_count, decomposed_count, skipped_count, failed_count,
     )
     return updated
+
+
+def _attempt_decomposition(
+    chunk: Chunk,
+    all_chunks: list[Chunk],
+    children_by_parent: dict[str, list[Chunk]],
+    store: LadybugStore,
+    provider: Protocol,
+) -> str | None:
+    """Attempt to summarize an oversized chunk via decomposition.
+
+    Strategy:
+    - Class chunk with method children → summarize methods, compose class summary
+    - Standalone chunk → map-reduce
+
+    Args:
+        chunk: The oversized chunk that failed direct summarization.
+        all_chunks: Full chunk list for the file.
+        children_by_parent: Pre-built lookup of parent_id → child chunks.
+        store: LadybugStore for persisting intermediate summaries.
+        provider: SummarizerProvider.
+
+    Returns:
+        Summary string, or None if decomposition fails.
+    """
+    child_chunks = children_by_parent.get(chunk.id, [])
+
+    if child_chunks:
+        # Class decomposition: summarize methods, compose class summary
+        logger.info(
+            "Decomposing class chunk %s via %d method children",
+            chunk.id, len(child_chunks),
+        )
+        return _decompose_class_chunk(chunk, child_chunks, all_chunks, store, provider)
+    else:
+        # Map-reduce for standalone oversized chunks
+        logger.info(
+            "Decomposing standalone chunk %s via map-reduce",
+            chunk.id,
+        )
+        context = (
+            f"File: {chunk.file_path}\n"
+            f"Chunk: {chunk.name} ({chunk.chunk_type.value})\n"
+            f"Lines: {chunk.start_line}-{chunk.end_line}"
+        )
+        return _map_reduce_summarize(chunk.content, context, provider)
