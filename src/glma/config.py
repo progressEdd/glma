@@ -4,7 +4,7 @@ import tomllib
 from pathlib import Path
 from typing import Optional
 
-from glma.models import IndexConfig, Language, WatchConfig, ExportConfig, SummarizeConfig
+from glma.models import IndexConfig, Language, WatchConfig, ExportConfig, SummarizeConfig, PROVIDER_PRESETS
 
 
 def load_config(repo_root: Path, cli_overrides: Optional[dict] = None) -> IndexConfig:
@@ -89,6 +89,7 @@ def load_summarize_config(repo_root: Path, cli_overrides: Optional[dict] = None)
     """Load summarization configuration from .glma.toml [summarize] section + CLI flags."""
     config_path = repo_root / ".glma.toml"
     file_config = {}
+    raw = {}
 
     if config_path.exists():
         with open(config_path, "rb") as f:
@@ -102,5 +103,29 @@ def load_summarize_config(repo_root: Path, cli_overrides: Optional[dict] = None)
         for key, value in cli_overrides.items():
             if value is not None:
                 merged[key] = value
+
+    # Load custom providers from [summarize.providers] section
+    custom_providers = {}
+    if raw:
+        summarize_section = raw.get("summarize", {})
+        custom_providers = summarize_section.get("providers", {})
+
+    # Merge custom providers with built-in presets
+    all_presets = {**PROVIDER_PRESETS, **custom_providers}
+
+    # Resolve provider preset to base_url and model
+    provider_name = merged.get("provider", "local")
+    if provider_name in all_presets:
+        preset = all_presets[provider_name]
+        # Preset fills defaults; explicit CLI flags override
+        if "base_url" not in merged or merged.get("base_url") == "http://localhost:1234/v1":
+            merged["base_url"] = preset["base_url"]
+        if "model" not in merged or merged.get("model") == "default":
+            merged["model"] = preset.get("model", "default")
+        # Map preset names to SummarizeProvider enum values
+        if provider_name not in ("local", "pi"):
+            merged["provider"] = "local"
+
+    merged["custom_providers"] = custom_providers
 
     return SummarizeConfig(**merged)

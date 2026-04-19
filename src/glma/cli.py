@@ -52,12 +52,17 @@ def index(
     summarize_provider: Optional[str] = typer.Option(
         None,
         "--summarize-provider",
-        help="Summarization provider: 'local' (OpenAI-compatible) or 'pi'.",
+        help="Summarization provider: preset name (ollama, lmstudio, llamacpp, vllm, aphrodite, local, pi) or leave unset for auto-detect.",
     ),
     summarize_model: Optional[str] = typer.Option(
         None,
         "--summarize-model",
         help="Model name for summarization (e.g., 'llama3', 'codellama').",
+    ),
+    ai_url: Optional[str] = typer.Option(
+        None,
+        "--ai-url",
+        help="Override API base URL for the summarization provider.",
     ),
     max_chunk_chars: Optional[int] = typer.Option(
         None,
@@ -103,7 +108,7 @@ def index(
     if summarize:
         from glma.config import load_summarize_config
         from glma.summarize import summarize_chunks
-        from glma.summarize.providers import OpenAICompatibleProvider, PiProvider
+        from glma.summarize.providers import OpenAICompatibleProvider
         from glma.db.ladybug_store import LadybugStore
 
         # Build summarize CLI overrides
@@ -112,6 +117,8 @@ def index(
             summarize_overrides["provider"] = summarize_provider
         if summarize_model:
             summarize_overrides["model"] = summarize_model
+        if ai_url:
+            summarize_overrides["base_url"] = ai_url
         if max_chunk_chars is not None:
             summarize_overrides["max_chunk_chars"] = max_chunk_chars
 
@@ -119,13 +126,10 @@ def index(
 
         # Instantiate provider
         try:
-            if summ_cfg.provider.value == "pi":
-                provider = PiProvider(model=summ_cfg.model)
-            else:
-                provider = OpenAICompatibleProvider(
-                    base_url=summ_cfg.base_url,
-                    model=summ_cfg.model,
-                )
+            provider = OpenAICompatibleProvider(
+                base_url=summ_cfg.base_url,
+                model=summ_cfg.model,
+            )
         except ImportError as e:
             console.print(f"[red]Error:[/red] {e}")
             raise typer.Exit(1)
@@ -228,7 +232,7 @@ def query(
     summarize_provider: Optional[str] = typer.Option(
         None,
         "--summarize-provider",
-        help="Summarization provider: 'local' (OpenAI-compatible) or 'pi'.",
+        help="Summarization provider: preset name (ollama, lmstudio, llamacpp, vllm, aphrodite, local, pi) or leave unset for auto-detect.",
     ),
     summarize_model: Optional[str] = typer.Option(
         None,
@@ -277,7 +281,7 @@ def query(
         nb_cache_dir = None
         if summarize:
             from glma.config import load_summarize_config
-            from glma.summarize.providers import OpenAICompatibleProvider, PiProvider
+            from glma.summarize.providers import OpenAICompatibleProvider
 
             summarize_overrides = {"enabled": True}
             if summarize_provider:
@@ -288,13 +292,10 @@ def query(
             summ_cfg = load_summarize_config(repo_root_path, summarize_overrides)
 
             try:
-                if summ_cfg.provider.value == "pi":
-                    nb_provider = PiProvider(model=summ_cfg.model)
-                else:
-                    nb_provider = OpenAICompatibleProvider(
-                        base_url=summ_cfg.base_url,
-                        model=summ_cfg.model,
-                    )
+                nb_provider = OpenAICompatibleProvider(
+                    base_url=summ_cfg.base_url,
+                    model=summ_cfg.model,
+                )
             except ImportError as e:
                 console.print(f"[red]Error:[/red] {e}")
                 raise typer.Exit(1)

@@ -3,7 +3,7 @@
 import pytest
 from unittest.mock import MagicMock, patch
 
-from glma.summarize.providers import OpenAICompatibleProvider, PiProvider
+from glma.summarize.providers import OpenAICompatibleProvider
 
 
 class TestOpenAICompatibleProvider:
@@ -61,21 +61,16 @@ class TestOpenAICompatibleProvider:
             mock_openai_cls.assert_called_once_with(base_url="http://ollama:11434/v1", api_key="not-needed")
 
 
-class TestPiProvider:
-    """Test pi provider."""
+class TestProviderPresets:
+    """Test provider preset data."""
 
-    def test_init_raises_import_error_without_pi(self):
-        """Init should raise ImportError when pi SDK not available."""
-        with patch.dict("sys.modules", {"pi": None}):
-            with pytest.raises(ImportError, match="pi SDK"):
-                PiProvider()
+    def test_provider_presets_complete(self):
+        from glma.models import PROVIDER_PRESETS
+        expected = {"local", "pi", "ollama", "lmstudio", "llamacpp", "vllm", "aphrodite"}
+        assert set(PROVIDER_PRESETS.keys()) == expected
 
-    def test_satisfies_protocol(self):
-        """PiProvider should have summarize method matching protocol."""
-        # Just verify the interface exists (can't test actual pi SDK without it)
-        assert hasattr(PiProvider, "summarize")
-        import inspect
-        sig = inspect.signature(PiProvider.summarize)
-        params = list(sig.parameters.keys())
-        assert "code" in params
-        assert "context" in params
+    def test_pi_provider_removed(self):
+        """PiProvider stub was removed - real integration is TypeScript extension."""
+        import importlib
+        providers = importlib.import_module("glma.summarize.providers")
+        assert not hasattr(providers, "PiProvider"), "PiProvider should be removed"

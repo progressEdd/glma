@@ -111,6 +111,17 @@ class SummarizeProvider(str, Enum):
     PI = "pi"
 
 
+PROVIDER_PRESETS: dict[str, dict[str, str]] = {
+    "local": {"base_url": "http://localhost:1234/v1", "model": "default"},
+    "pi": {"base_url": "", "model": "default"},
+    "ollama": {"base_url": "http://localhost:11434/v1", "model": "llama3"},
+    "lmstudio": {"base_url": "http://localhost:1234/v1", "model": "default"},
+    "llamacpp": {"base_url": "http://localhost:8080/v1", "model": "default"},
+    "vllm": {"base_url": "http://localhost:8000/v1", "model": "default"},
+    "aphrodite": {"base_url": "http://localhost:7860/v1", "model": "default"},
+}
+
+
 class SummarizeConfig(BaseModel):
     """Configuration for AI summarization, loaded from .glma.toml [summarize] + CLI flags."""
     enabled: bool = Field(
@@ -133,6 +144,14 @@ class SummarizeConfig(BaseModel):
         default=3000,
         ge=100,
         description="Max chars per chunk before decomposition triggers. Chunks exceeding this are decomposed (class→method summaries→compose, or map-reduce for standalone chunks). Default 3000 ≈ 750 tokens.",
+    )
+    model_hint: str = Field(
+        default="",
+        description="Model hint for pi extension: 'fast', 'capable', exact model ID, or empty for pi's active model",
+    )
+    custom_providers: dict[str, dict[str, str]] = Field(
+        default_factory=dict,
+        description="Custom provider presets: name → {base_url, model}. Merged with PROVIDER_PRESETS.",
     )
 
 

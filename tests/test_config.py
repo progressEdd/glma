@@ -117,3 +117,70 @@ class TestSummarizeConfig:
         from glma.config import load_summarize_config
         cfg = load_summarize_config(tmp_path, {"enabled": True})
         assert cfg.enabled is True
+
+
+class TestProviderPresets:
+    """Test provider preset resolution in load_summarize_config()."""
+
+    def test_ollama_preset_resolves(self, tmp_path):
+        """--summarize-provider ollama resolves to correct base_url and model."""
+        from glma.config import load_summarize_config
+        cfg = load_summarize_config(tmp_path, cli_overrides={"provider": "ollama"})
+        assert cfg.base_url == "http://localhost:11434/v1"
+        assert cfg.model == "llama3"
+
+    def test_lmstudio_preset_resolves(self, tmp_path):
+        """--summarize-provider lmstudio resolves to correct base_url and model."""
+        from glma.config import load_summarize_config
+        cfg = load_summarize_config(tmp_path, cli_overrides={"provider": "lmstudio"})
+        assert cfg.base_url == "http://localhost:1234/v1"
+        assert cfg.model == "default"
+
+    def test_preset_url_override(self, tmp_path):
+        """Explicit base_url overrides preset base_url."""
+        from glma.config import load_summarize_config
+        cfg = load_summarize_config(tmp_path, cli_overrides={
+            "provider": "ollama",
+            "base_url": "http://custom:9999/v1",
+        })
+        assert cfg.base_url == "http://custom:9999/v1"
+        assert cfg.model == "llama3"  # model from preset still applies
+
+    def test_preset_model_override(self, tmp_path):
+        """Explicit model overrides preset default model."""
+        from glma.config import load_summarize_config
+        cfg = load_summarize_config(tmp_path, cli_overrides={
+            "provider": "ollama",
+            "model": "codellama",
+        })
+        assert cfg.base_url == "http://localhost:11434/v1"  # URL from preset
+        assert cfg.model == "codellama"
+
+    def test_local_preset_backward_compat(self, tmp_path):
+        """'local' preset still resolves to LM Studio defaults."""
+        from glma.config import load_summarize_config
+        cfg = load_summarize_config(tmp_path, cli_overrides={"provider": "local"})
+        assert cfg.base_url == "http://localhost:1234/v1"
+        assert cfg.model == "default"
+
+    def test_custom_provider_from_toml(self, tmp_path):
+        """Custom providers from [summarize.providers] override built-in presets."""
+        from glma.config import load_summarize_config
+        config_file = tmp_path / ".glma.toml"
+        config_file.write_text(
+            '[summarize.providers.ollama]\nbase_url = "http://my-server:11434/v1"\nmodel = "mistral"\n'
+        )
+        cfg = load_summarize_config(tmp_path, cli_overrides={"provider": "ollama"})
+        assert cfg.base_url == "http://my-server:11434/v1"
+        assert cfg.model == "mistral"
+
+    def test_new_custom_provider(self, tmp_path):
+        """Entirely new custom provider can be added via config."""
+        from glma.config import load_summarize_config
+        config_file = tmp_path / ".glma.toml"
+        config_file.write_text(
+            '[summarize.providers.myprovider]\nbase_url = "http://custom:5555/v1"\nmodel = "mymodel"\n'
+        )
+        cfg = load_summarize_config(tmp_path, cli_overrides={"provider": "myprovider"})
+        assert cfg.base_url == "http://custom:5555/v1"
+        assert cfg.model == "mymodel"
