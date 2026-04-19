@@ -55,14 +55,15 @@ Agents can call a single command and get exactly the code context they need to i
 
 ### Active (v1.2)
 
-- [ ] Pi agent integration (glma_summarize tool, model_hint resolution)
-- [ ] Named provider presets (--ai-provider ollama/lmstudio/etc.)
+No remaining active requirements — all v1.2 requirements validated.
 
 ### Validated (v1.2)
 
 - ✓ Chunk truncation before summarization (Phase 10)
 - ✓ Markdown key-value export format as default (Phase 11)
 - ✓ Multi-format export support — markdown-kv, markdown, json, yaml (Phase 11)
+- ✓ Pi agent integration — /glma-summarize command, glma_summarize tool, model_hint resolution (Phase 12)
+- ✓ Named provider presets — --summarize-provider ollama/lmstudio/llamacpp/vllm/aphrodite + custom providers via .glma.toml (Phase 12)
 
 ### Completed (v1.1)
 
@@ -144,4 +145,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-14 after Phase 11 completion*
+*Last updated: 2026-04-19 after Phase 12 completion (v1.2 milestone complete)*
