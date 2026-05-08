@@ -184,3 +184,125 @@ class TestProviderPresets:
         cfg = load_summarize_config(tmp_path, cli_overrides={"provider": "myprovider"})
         assert cfg.base_url == "http://custom:5555/v1"
         assert cfg.model == "mymodel"
+
+
+class TestSearchConfigDefaults:
+    """Test load_search_config() defaults."""
+
+    def test_defaults(self, tmp_path):
+        from glma.config import load_search_config
+        cfg = load_search_config(tmp_path)
+        assert cfg.enabled is False
+        assert cfg.embedding_provider == "embed-local"
+        assert cfg.embedding_model == "default"
+        assert cfg.embedding_base_url == "http://localhost:1234/v1"
+        assert cfg.vector_dimensions == 768
+        assert cfg.similarity_threshold == 0.5
+        assert cfg.hybrid_keyword_weight == 0.5
+        assert cfg.hybrid_vector_weight == 0.5
+
+
+class TestSearchConfigValidation:
+    """Test SearchConfig model validation."""
+
+    def test_dimensions_must_be_positive(self, tmp_path):
+        from glma.models import SearchConfig
+        from pydantic import ValidationError
+        with pytest.raises(ValidationError):
+            SearchConfig(vector_dimensions=0)
+
+    def test_threshold_zero_to_one(self, tmp_path):
+        from glma.models import SearchConfig
+        from pydantic import ValidationError
+        with pytest.raises(ValidationError):
+            SearchConfig(similarity_threshold=1.5)
+        SearchConfig(similarity_threshold=0.0)
+        SearchConfig(similarity_threshold=1.0)
+
+    def test_weights_must_sum_to_one(self, tmp_path):
+        from glma.models import SearchConfig
+        from pydantic import ValidationError
+        with pytest.raises(ValidationError):
+            SearchConfig(hybrid_keyword_weight=0.3, hybrid_vector_weight=0.3)
+
+    def test_weights_default_valid(self, tmp_path):
+        from glma.models import SearchConfig
+        cfg = SearchConfig()
+        assert abs(cfg.hybrid_keyword_weight + cfg.hybrid_vector_weight - 1.0) < 0.01
+
+
+class TestSearchConfigFile:
+    """Test load_search_config() from .glma.toml."""
+
+    def test_load_from_file(self, tmp_path):
+        from glma.config import load_search_config
+        config_file = tmp_path / ".glma.toml"
+        config_file.write_text(
+            '[search]\nenabled = true\nembedding_provider = "embed-ollama"\n'
+        )
+        cfg = load_search_config(tmp_path)
+        assert cfg.enabled is True
+        assert cfg.embedding_base_url == "http://localhost:11434/v1"
+        assert cfg.embedding_model == "qwen3-embedding"
+
+    def test_cli_overrides_file(self, tmp_path):
+        from glma.config import load_search_config
+        config_file = tmp_path / ".glma.toml"
+        config_file.write_text('[search]\nembedding_model = "from-file"\n')
+        cfg = load_search_config(tmp_path, {"embedding_model": "from-cli"})
+        assert cfg.embedding_model == "from-cli"
+
+    def test_none_override_ignored(self, tmp_path):
+        from glma.config import load_search_config
+        config_file = tmp_path / ".glma.toml"
+        config_file.write_text('[search]\nembedding_model = "from-file"\n')
+        cfg = load_search_config(tmp_path, {"embedding_model": None})
+        assert cfg.embedding_model == "from-file"
+
+
+class TestSearchProviderPresets:
+    """Test embedding provider preset resolution in load_search_config()."""
+
+    def test_ollama_preset_resolves(self, tmp_path):
+        from glma.config import load_search_config
+        cfg = load_search_config(tmp_path, cli_overrides={"embedding_provider": "embed-ollama"})
+        assert cfg.embedding_base_url == "http://localhost:11434/v1"
+        assert cfg.embedding_model == "qwen3-embedding"
+
+    def test_preset_url_override(self, tmp_path):
+        """Explicit embedding_base_url overrides preset base_url."""
+        from glma.config import load_search_config
+        cfg = load_search_config(tmp_path, cli_overrides={
+            "embedding_provider": "embed-ollama",
+            "embedding_base_url": "http://custom:9999/v1",
+        })
+        assert cfg.embedding_base_url == "http://custom:9999/v1"
+        assert cfg.embedding_model == "qwen3-embedding"
+
+    def test_preset_model_override(self, tmp_path):
+        """Explicit embedding_model overrides preset default model."""
+        from glma.config import load_search_config
+        cfg = load_search_config(tmp_path, cli_overrides={
+            "embedding_provider": "embed-ollama",
+            "embedding_model": "custom-model",
+        })
+        assert cfg.embedding_base_url == "http://localhost:11434/v1"
+        assert cfg.embedding_model == "custom-model"
+
+    def test_custom_provider_from_toml(self, tmp_path):
+        """Custom providers from [search.providers] override built-in presets."""
+        from glma.config import load_search_config
+        config_file = tmp_path / ".glma.toml"
+        config_file.write_text(
+            '[search.providers.mycustom]\nbase_url = "http://my-server:5555/v1"\nmodel = "mymodel"\n'
+        )
+        cfg = load_search_config(tmp_path, cli_overrides={"embedding_provider": "mycustom"})
+        assert cfg.embedding_base_url == "http://my-server:5555/v1"
+        assert cfg.embedding_model == "mymodel"
+
+    def test_embed_local_preset(self, tmp_path):
+        """'embed-local' preset resolves to LM Studio defaults."""
+        from glma.config import load_search_config
+        cfg = load_search_config(tmp_path, cli_overrides={"embedding_provider": "embed-local"})
+        assert cfg.embedding_base_url == "http://localhost:1234/v1"
+        assert cfg.embedding_model == "default"
