@@ -4,7 +4,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class ChunkType(str, Enum):
@@ -153,6 +153,35 @@ class SummarizeConfig(BaseModel):
         default_factory=dict,
         description="Custom provider presets: name → {base_url, model}. Merged with PROVIDER_PRESETS.",
     )
+
+
+EMBEDDING_PROVIDER_PRESETS: dict[str, dict[str, str]] = {
+    "embed-ollama": {"base_url": "http://localhost:11434/v1", "model": "qwen3-embedding"},
+    "embed-lmstudio": {"base_url": "http://localhost:1234/v1", "model": "ENOSYS/Octen-Embedding-8B-750-v1-GGUF"},
+    "embed-vllm": {"base_url": "http://localhost:8000/v1", "model": "default"},
+    "embed-llamacpp": {"base_url": "http://localhost:8080/v1", "model": "default"},
+    "embed-local": {"base_url": "http://localhost:1234/v1", "model": "default"},
+}
+
+
+class SearchConfig(BaseModel):
+    """Configuration for semantic/hybrid search, loaded from .glma.toml [search] + CLI flags."""
+    enabled: bool = Field(default=False, description="Enable semantic search")
+    embedding_provider: str = Field(default="embed-local", description="Embedding provider preset name")
+    embedding_model: str = Field(default="default", description="Model name for embeddings")
+    embedding_base_url: str = Field(default="http://localhost:1234/v1", description="OpenAI-compatible API base URL for embeddings")
+    vector_dimensions: int = Field(default=768, ge=1, description="Embedding vector dimensions (must match model output)")
+    similarity_threshold: float = Field(default=0.5, ge=0.0, le=1.0, description="Minimum similarity score for search results")
+    hybrid_keyword_weight: float = Field(default=0.5, ge=0.0, le=1.0, description="Weight for keyword search in hybrid scoring")
+    hybrid_vector_weight: float = Field(default=0.5, ge=0.0, le=1.0, description="Weight for vector search in hybrid scoring")
+    custom_providers: dict[str, dict[str, str]] = Field(default_factory=dict, description="Custom embedding provider presets: name -> {base_url, model}")
+
+    @model_validator(mode="after")
+    def _validate_hybrid_weights(self) -> "SearchConfig":
+        total = self.hybrid_keyword_weight + self.hybrid_vector_weight
+        if abs(total - 1.0) > 0.05:
+            raise ValueError(f"Hybrid weights must sum to ~1.0, got {total:.2f}")
+        return self
 
 
 class ExportConfig(BaseModel):
