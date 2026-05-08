@@ -4,7 +4,7 @@ import tomllib
 from pathlib import Path
 from typing import Optional
 
-from glma.models import IndexConfig, Language, WatchConfig, ExportConfig, SummarizeConfig, PROVIDER_PRESETS
+from glma.models import IndexConfig, Language, WatchConfig, ExportConfig, SummarizeConfig, PROVIDER_PRESETS, SearchConfig, EMBEDDING_PROVIDER_PRESETS
 
 
 def load_config(repo_root: Path, cli_overrides: Optional[dict] = None) -> IndexConfig:
@@ -129,3 +129,46 @@ def load_summarize_config(repo_root: Path, cli_overrides: Optional[dict] = None)
     merged["custom_providers"] = custom_providers
 
     return SummarizeConfig(**merged)
+
+
+def load_search_config(repo_root: Path, cli_overrides: Optional[dict] = None) -> SearchConfig:
+    """Load search/embedding configuration from .glma.toml [search] section + CLI flags."""
+    config_path = repo_root / ".glma.toml"
+    file_config = {}
+    raw = {}
+
+    if config_path.exists():
+        with open(config_path, "rb") as f:
+            raw = tomllib.load(f)
+        file_config = raw.get("search", {})
+
+    merged = {}
+    if file_config:
+        merged.update(file_config)
+    if cli_overrides:
+        for key, value in cli_overrides.items():
+            if value is not None:
+                merged[key] = value
+
+    # Load custom providers from [search.providers] section
+    custom_providers = {}
+    if raw:
+        search_section = raw.get("search", {})
+        custom_providers = search_section.get("providers", {})
+
+    # Merge custom providers with built-in embedding presets
+    all_presets = {**EMBEDDING_PROVIDER_PRESETS, **custom_providers}
+
+    # Resolve provider preset to base_url and model
+    provider_name = merged.get("embedding_provider", "embed-local")
+    if provider_name in all_presets:
+        preset = all_presets[provider_name]
+        # Preset fills defaults; explicit CLI flags override
+        if "embedding_base_url" not in merged or merged.get("embedding_base_url") == "http://localhost:1234/v1":
+            merged["embedding_base_url"] = preset["base_url"]
+        if "embedding_model" not in merged or merged.get("embedding_model") == "default":
+            merged["embedding_model"] = preset.get("model", "default")
+
+    merged["custom_providers"] = custom_providers
+
+    return SearchConfig(**merged)
