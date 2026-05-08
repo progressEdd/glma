@@ -10,7 +10,7 @@ Add hybrid keyword + vector search on chunk summaries so agents can find relevan
 - Continues from v1.2 (Phases 10-12)
 - v1.3 starts at Phase 13
 
-- [ ] **Phase 13: Embedding Infrastructure** - Provider protocol, presets, config, .glma.toml [search] section
+- [x] **Phase 13: Embedding Infrastructure** - Provider protocol, presets, config, .glma.toml [search] section
 - [ ] **Phase 14: Vector Storage & Embedding Command** - Ladybug vector index, `glma embed`, incremental embedding
 - [ ] **Phase 15: Hybrid Search & Query Integration** - Hybrid keyword+vector search, `--semantic` flag, result ranking
 
