@@ -58,9 +58,12 @@ Agents can call a single command and get exactly the code context they need to i
 
 ### Active (v1.3)
 
-- EMB-01 through EMB-07: Embedding infrastructure (protocol, providers, config)
 - VEC-01 through VEC-05: Vector storage and `glma embed` command
 - SRCH-01 through SRCH-06: Hybrid search and query integration
+
+### Validated (v1.3)
+
+- ✓ EMB-01 through EMB-07: Embedding infrastructure — protocol, providers, presets, config (Phase 13)
 
 ### Validated (v1.2)
 
@@ -153,4 +156,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-05-08 after v1.3 milestone definition*
+*Last updated: 2026-05-09 after Phase 13 completion (embedding infrastructure)*
