@@ -52,10 +52,10 @@ User described the full pipeline architecture during protocol shape discussion:
 | Ollama → `nomic-embed-text`, others → `default` | Ollama gets specific model, servers with loaded models use default | |
 | All → `default` | Let server decide | |
 | All explicitly specified | Pick specific models for each preset | |
-| Ollama → `qwen3-embedding`, others → `default` | User-specified Ollama model | ✓ |
+| Ollama → `qwen3-embedding`, LM Studio → `Octen`, others → `default` | User-specified models for known presets | ✓ |
 
-**User's choice:** Ollama → `qwen3-embedding`, others → `default`
-**Notes:** Also specified Hugging Face model `ENOSYS/Octen-Embedding-8B-750-v1-GGUF` for future use.
+**User's choice:** Ollama → `qwen3-embedding`, LM Studio → `ENOSYS/Octen-Embedding-8B-750-v1-GGUF`, others → `default`
+**Notes:** Octen is a GGUF model loaded through LM Studio (not Hugging Face/sentence-transformers). Originally thought to be HF, corrected during discussion.
 
 ---
 

@@ -41,7 +41,7 @@ This phase delivers: EmbeddingProvider protocol, OpenAIEmbeddingProvider, Search
 - **D-13:** Embedding presets use prefixed names to distinguish from summarization presets: `embed-ollama`, `embed-lmstudio`, `embed-vllm`, `embed-llamacpp`, `embed-local`
 - **D-14:** Embedding-specific model defaults:
   - `embed-ollama`: `http://localhost:11434/v1`, model `qwen3-embedding`
-  - `embed-lmstudio`: `http://localhost:1234/v1`, model `default`
+  - `embed-lmstudio`: `http://localhost:1234/v1`, model `ENOSYS/Octen-Embedding-8B-750-v1-GGUF`
   - `embed-vllm`: `http://localhost:8000/v1`, model `default`
   - `embed-llamacpp`: `http://localhost:8080/v1`, model `default`
   - `embed-local`: `http://localhost:1234/v1`, model `default` (raw/manual, same as lmstudio)
@@ -117,7 +117,7 @@ This phase delivers: EmbeddingProvider protocol, OpenAIEmbeddingProvider, Search
 <deferred>
 ## Deferred Ideas
 
-- **Hugging Face embedding provider** — in-process via `sentence-transformers`, model `ENOSYS/Octen-Embedding-8B-750-v1-GGUF`. Belongs in a future phase after OpenAI-compatible provider is proven.
+- **Hugging Face embedding provider** — in-process via `sentence-transformers`. Future phase when needed.
 - **LLM-based query rewriting** (SRCH-07) — noted in REQUIREMENTS.md deferred section
 - **Graph relationship traversal + semantic search** (SRCH-08) — 3-way hybrid, future capability
 
