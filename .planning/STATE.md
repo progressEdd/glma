@@ -1,50 +1,60 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.2
-milestone_name: milestone
-status: completed
-stopped_at: Milestone v1.2 complete
-last_updated: "2026-04-19T17:53:10.656Z"
-last_activity: 2026-04-19
+milestone: v1.3
+milestone_name: Hybrid Semantic Search
+status: planning
+stopped_at: Milestone v1.3 defined
+last_updated: "2026-05-08T18:00:00.000Z"
+last_activity: 2026-05-08
 progress:
   total_phases: 3
-  completed_phases: 3
-  total_plans: 4
-  completed_plans: 4
-  percent: 100
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-04-10)
+See: .planning/PROJECT.md (updated 2026-05-08)
 
 **Core value:** Agents can call a single command and get exactly the code context they need to implement features — no grepping, no raw file parsing, no guesswork.
-**Current focus:** v1.2 — robustness & export formats
+**Current focus:** v1.3 — Hybrid Semantic Search
 
 ## Current Position
 
-Phase: 12 of 3 (pi agent integration)
-Plan: 2 of 2
-Status: Milestone complete
-Last activity: 2026-04-19
+Phase: Not started (milestone defined)
+Plan: -
+Status: Ready to plan
+Last activity: 2026-05-08
 
-Progress: [██████████] 100% (3/3 phases)
+Progress: [          ] 0% (0/3 phases)
 
-Next: Milestone v1.2 complete — consider /gsd-complete-milestone
+Next: `/gsd-discuss-phase 13` or `/gsd-plan-phase 13`
 
-## v1.2 Summary
+## v1.3 Summary
 
-**Goal:** Make summarization robust for real-world codebases and add compact key-value export format
+**Goal:** Add hybrid keyword + vector search on chunk summaries so agents can find relevant code by meaning, not just exact matches.
 
 **Phases:**
 
-- Phase 10: Chunk Truncation for Summarization (handle oversized chunks, configurable limits)
-- Phase 11: Markdown Key-Value Export Format (new default format, multi-format support)
-- Phase 12: Pi Agent Integration (pi extension, model hints, provider presets)
+- Phase 13: Embedding Infrastructure (protocol, providers, config)
+- Phase 14: Vector Storage & Embedding Command (Ladybug vectors, `glma embed`)
+- Phase 15: Hybrid Search & Query Integration (hybrid ranking, `--semantic` flag)
+
+**Architecture:**
+- Embedding providers (ollama, lmstudio, vllm, llamacpp, local) → generate vectors
+- Ladybug graph DB → stores vectors + does hybrid search
+- `glma query --semantic` → returns ranked chunks
 
 ## Prior Milestones
+
+### v1.2 — Robustness & Export Formats (completed 2026-04-19)
+
+- 3 phases (10-12), 4 plans
+- Chunk truncation, markdown-kv export, pi agent integration
 
 ### v1.1 — Polish & Complete (completed 2026-04-11)
 
@@ -57,6 +67,12 @@ Next: Milestone v1.2 complete — consider /gsd-complete-milestone
 - Core indexing, relationships, query/notebooks, watching/export
 
 ## Performance Metrics
+
+**Velocity (v1.2):**
+
+- Total plans completed: 4
+- Phases: 10-12
+- Total execution: ~3 hours across 1 day
 
 **Velocity (v1.1):**
 
@@ -75,14 +91,23 @@ Next: Milestone v1.2 complete — consider /gsd-complete-milestone
 ### Decisions
 
 Decisions are logged in PROJECT.md Key Decisions table.
-Key decisions from v1.0/v1.1 carried forward:
+Key decisions from v1.0/v1.1/v1.2 carried forward:
 
-- Ladybug (real_ladybug) for graph storage
+- Ladybug (real_ladybug) for graph storage (native vector indices + full-text search)
 - Tree-sitter for C + Python parsing
 - 3-pass pipeline: chunks → relationships → cross-file
 - Markdown as first-class output (agent-readable, air-gapped compatible)
 - Rule-based summaries by default, AI optional
 - Three export modes: directory, tar.gz, stdout
+- Strategy pattern for export formats (FormatRenderer subclasses)
+- KV as default export format (most token-efficient for LLM consumers)
+
+New v1.3 decisions:
+
+- Hybrid search with configurable keyword/vector weights
+- Local embedding providers only (air-gapped philosophy)
+- Embedding happens after indexing, not during (decoupled pipeline)
+- Provider presets reuse same pattern as summarization
 
 ### Resolved Todos
 
@@ -92,7 +117,7 @@ Key decisions from v1.0/v1.1 carried forward:
 
 ### Remaining (future)
 
-- **Semantic search layer** on top of graph relationships
+- **Semantic search layer** on top of graph relationships → NOW IN v1.3
 - **Extended language support** (C++, TypeScript, Rust)
 - **MCP server interface** for direct agent integration
 - **C duplicate chunk IDs** — deferred (debug/2026-04-10-c-duplicate-chunk-ids.md)
@@ -107,6 +132,6 @@ Key decisions from v1.0/v1.1 carried forward:
 
 ## Session Continuity
 
-Last session: 2026-04-19
-Stopped at: Milestone v1.2 complete
-Resume with: `/gsd-complete-milestone v1.2`
+Last session: 2026-05-08
+Stopped at: Milestone v1.3 defined, ready to plan
+Resume with: `/gsd-discuss-phase 13` or `/gsd-plan-phase 13`

@@ -37,25 +37,30 @@ Agents can call a single command and get exactly the code context they need to i
 - ✓ Optional AI summaries via OpenAI-compatible local model (Phase 4)
 - ✓ 211 tests, all passing (Phase 1-4)
 
-## Current Milestone: v1.2 Robustness & Export Formats
+## Current Milestone: v1.3 Hybrid Semantic Search
 
-**Goal:** Make summarization robust for real-world codebases (large chunks, any context window) and add compact key-value export format.
+**Goal:** Add hybrid keyword + vector search on chunk summaries so agents can find relevant code by meaning, not just exact matches.
 
 **Target features:**
-- Truncate oversized chunks before summarization (configurable limits)
-- Markdown key-value export format as new default (LLM-friendly)
-- Multi-format export support (markdown, json, yaml)
-- Pi agent integration for summarization (model hints, provider presets)
+- Embedding provider protocol with presets (ollama, lmstudio, vllm, llamacpp, local)
+- `[search]` section in `.glma.toml` for embedding config, hybrid weights, similarity threshold
+- Ladybug vector index on chunk summary embeddings
+- `glma embed` standalone command for (re-)embedding
+- Hybrid search: Ladybug full-text + vector similarity with configurable weighting
+- `glma query --semantic "find authentication logic"` CLI integration
 
 **Key context:**
-- Phase 10 is a robustness fix — summarization currently fails on large chunks with small context models
-- Phase 11 is the main feature — new default export format designed for LLM consumption
-- Phase 12 is architectural — pi extension leveraging pi's model registry
-- v1.1 shipped 274 tests, all passing
+- Ladybug already has native vector index support — no new DB needed
+- Chunk summaries already exist (rule-based + AI) — embedding target is ready
+- Provider presets reuse the same pattern as `[summarize]` providers
+- Local embedding models only — air-gapped philosophy maintained
+- 3 phases: embedding infrastructure → vector storage → hybrid search
 
-### Active (v1.2)
+### Active (v1.3)
 
-No remaining active requirements — all v1.2 requirements validated.
+- EMB-01 through EMB-07: Embedding infrastructure (protocol, providers, config)
+- VEC-01 through VEC-05: Vector storage and `glma embed` command
+- SRCH-01 through SRCH-06: Hybrid search and query integration
 
 ### Validated (v1.2)
 
@@ -77,9 +82,10 @@ No remaining active requirements — all v1.2 requirements validated.
 
 ### Deferred
 
-- [ ] Semantic search layer on top of graph relationships
 - [ ] Extended language support (C++, TypeScript, Rust)
 - [ ] MCP server interface for direct agent integration
+- [ ] LLM-based query rewriting for semantic search
+- [ ] Graph relationship traversal + semantic search (3-way hybrid)
 
 ### Out of Scope
 
@@ -87,6 +93,8 @@ No remaining active requirements — all v1.2 requirements validated.
 - Web UI or dashboard — agents and humans consume markdown, no visual interface needed
 - Proprietary codebase handling — focused on open/accessible repos initially
 - Real-time collaboration — single-user tool, no multi-user sync
+- Cloud embedding providers — air-gapped philosophy, local models only
+- Reranking stage — YAGNI for v1.3, hybrid scoring should suffice
 
 ## Context
 
@@ -145,4 +153,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-19 after Phase 12 completion (v1.2 milestone complete)*
+*Last updated: 2026-05-08 after v1.3 milestone definition*

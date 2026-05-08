@@ -1,74 +1,114 @@
-# Roadmap: glma v1.2 — Robustness & Export Formats
+# Roadmap: glma v1.3 — Hybrid Semantic Search
 
 ## Overview
 
-Make summarization robust for real-world codebases (large chunks, any context window size) and add a compact markdown key-value export format as the new default. Three focused phases: one bug fix, one new feature, one architectural integration.
+Add hybrid keyword + vector search on chunk summaries so agents can find relevant code by meaning, not just exact matches. Embedding providers generate vectors from summaries, Ladybug stores and searches them, and `glma query --semantic` returns hybrid-ranked results.
 
 ## Phases
 
 **Phase Numbering:**
-- Continues from v1.1 (Phases 5-9)
-- v1.2 starts at Phase 10
+- Continues from v1.2 (Phases 10-12)
+- v1.3 starts at Phase 13
 
-- [x] **Phase 10: Chunk Truncation for Summarization** - Handle oversized chunks that exceed model context windows
-- [x] **Phase 11: Markdown Key-Value Export Format** - New default export format with multi-format support
-- [x] **Phase 12: Pi Agent Integration** - Pi extension for summarization with model hint resolution ✓ Complete (2026-04-19)
+- [ ] **Phase 13: Embedding Infrastructure** - Provider protocol, presets, config, .glma.toml [search] section
+- [ ] **Phase 14: Vector Storage & Embedding Command** - Ladybug vector index, `glma embed`, incremental embedding
+- [ ] **Phase 15: Hybrid Search & Query Integration** - Hybrid keyword+vector search, `--semantic` flag, result ranking
 
 ## Phase Details
 
-### Phase 10: Chunk Truncation for Summarization
-**Goal**: `glma index --summarize` completes without errors regardless of chunk sizes or model context window
-**Depends on**: v1.1 complete (Phase 7 summarization pipeline)
-**Requirements**: TRUNC-01
+### Phase 13: Embedding Infrastructure
+**Goal**: Any local embedding provider can generate vectors from text via a unified protocol
+**Depends on**: v1.2 complete (Phase 7 provider pattern, Phase 10 chunk summaries)
+**Requirements**: EMB-01, EMB-02, EMB-03, EMB-04, EMB-05, EMB-06, EMB-07
 **Success Criteria** (what must be TRUE):
-  1. Chunks exceeding a configurable character limit are truncated before being sent to the summarization provider
-  2. Truncated chunks still receive a valid summary (covering their first N characters)
-  3. A warning is logged when truncation occurs, including chunk ID and original vs truncated size
-  4. The truncation threshold defaults to 3000 characters (~750 tokens) and is configurable via `.glma.toml` `[summarize] max_chunk_chars`
-  5. A full summarization run against a large codebase (e.g., ag2-framework) completes without 400 errors
-  6. All 274 existing tests still pass
+  1. EmbeddingProvider protocol exists with `embed(texts: list[str]) -> list[list[float]]` method
+  2. OpenAIEmbeddingProvider hits `/v1/embeddings` endpoint and returns float vectors
+  3. Provider presets exist for ollama, lmstudio, vllm, llamacpp, local with correct URLs/models
+  4. Custom providers merge from `[search.providers]` in `.glma.toml`
+  5. SearchConfig model validates: dimensions > 0, threshold 0-1, weights sum to ~1.0
+  6. `load_search_config()` resolves provider presets the same way `load_summarize_config()` does
+  7. All existing tests still pass
 
-### Phase 11: Markdown Key-Value Export Format
-**Goal**: `glma export` outputs a compact, LLM-friendly key-value markdown format by default, with option to select other formats
-**Depends on**: v1.1 complete (Phase 8 export infrastructure)
-**Requirements**: KV-01, KV-02
+### Phase 14: Vector Storage & Embedding Command
+**Goal**: Chunk summary embeddings are stored in Ladybug and can be generated/updated via CLI
+**Depends on**: Phase 13 (embedding providers working)
+**Requirements**: VEC-01, VEC-02, VEC-03, VEC-04, VEC-05
 **Success Criteria** (what must be TRUE):
-  1. `glma export` without format flag outputs markdown-kv format (hierarchical headings, `key: value` pairs)
-  2. `--format markdown` produces the current table-based format (backward compatible)
-  3. `--format json` produces raw JSON export
-  4. `--format yaml` produces YAML export
-  5. All export output files (INDEX.md, ARCHITECTURE.md, RELATIONSHIPS.md, per-file .md) respect the selected format
-  6. `ExportFormat` enum exists in models.py with values: `markdown_kv`, `markdown`, `json`, `yaml`
-  7. Existing `--format` flag alias `-f` works
-  8. All existing tests pass; new tests cover each format
+  1. Ladybug has a vector index on chunk embeddings with configurable dimensions
+  2. Embeddings are persisted in Ladybug alongside chunks (embedding column or related table)
+  3. `glma embed` generates embeddings for all chunks with non-empty summaries, skipping already-embedded chunks (unless forced)
+  4. Incremental embedding detects summary hash changes and re-embeds updated chunks
+  5. Rich progress bar displays during embedding (consistent with `glma index` UX)
+  6. All existing tests still pass
 
-### Phase 12: Pi Agent Integration
-**Goal**: Pi extension can generate summaries using pi's model registry — no separate LLM server needed
-**Depends on**: Phase 10 (robust summarization), Phase 11 (export format stable)
-**Requirements**: PI-01, PI-02
+### Phase 15: Hybrid Search & Query Integration
+**Goal**: `glma query --semantic "find authentication logic"` returns hybrid-ranked results
+**Depends on**: Phase 14 (embeddings stored in Ladybug)
+**Requirements**: SRCH-01, SRCH-02, SRCH-03, SRCH-04, SRCH-05, SRCH-06
 **Success Criteria** (what must be TRUE):
-  1. A pi extension exists at `~/.pi/agent/extensions/glma-summarize.ts` (or project-local)
-  2. Extension registers a `glma_summarize` tool that reads chunks needing summaries from glma DB
-  3. `model_hint` in `.glma.toml` resolves to an actual model via pi's registry (`fast` → cheapest, `capable` → strongest, exact ID → use that)
-  4. Summaries are written back to the glma database after generation
-  5. Fallback chain works: pi extension → local LLM endpoint → rule-based (no model)
-  6. Named provider presets work: `--ai-provider ollama`, `--ai-provider lmstudio`, etc. with correct default URLs
-  7. All existing tests pass
+  1. Hybrid search combines Ladybug full-text + vector similarity with configurable weights
+  2. `glma query --semantic "..."` embeds the query string and runs hybrid search
+  3. Results ranked by `keyword_weight × keyword_score + vector_weight × vector_score`
+  4. Results below `similarity_threshold` are filtered out
+  5. Output includes relevance score in both markdown and JSON formats
+  6. `--search-mode hybrid|vector|keyword` forces a specific strategy
+  7. All existing tests still pass
 
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 10 → 11 → 12
+Phases execute in numeric order: 13 → 14 → 15
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 10. Chunk Truncation | 1/1 | ✓ Complete | 2026-04-14 |
-| 11. Markdown Key-Value Export | 0/? | Complete    | 2026-04-14 |
-| 12. Pi Agent Integration | 2/2 | ✓ Complete | 2026-04-19 |
+| 13. Embedding Infrastructure | 0/? | Not started | — |
+| 14. Vector Storage & Embedding Command | 0/? | Not started | — |
+| 15. Hybrid Search & Query Integration | 0/? | Not started | — |
+
+## Architecture Overview
+
+```
+┌─────────────────────────────────────┐
+│         .glma.toml [search]         │
+│  provider, model, dimensions,       │
+│  threshold, hybrid weights          │
+└──────────────┬──────────────────────┘
+               │
+               ▼
+┌─────────────────────────────────────┐
+│      EmbeddingProvider Protocol     │
+│  embed(texts) → list[list[float]]   │
+└──────────────┬──────────────────────┘
+               │
+    ┌──────────┼──────────┐
+    ▼          ▼          ▼
+ Ollama    LMStudio    vLLM    ...custom
+ (preset)  (preset)    (preset)
+               │
+               ▼
+┌─────────────────────────────────────┐
+│     Ladybug Graph Database          │
+│  - Chunks (content, summary)        │
+│  - Embeddings (vector index)        │
+│  - Full-text index                  │
+└──────────────┬──────────────────────┘
+               │
+               ▼
+┌─────────────────────────────────────┐
+│        Hybrid Search Engine         │
+│  keyword_weight × FT score          │
+│  + vector_weight × cosine sim       │
+│  → ranked results                   │
+└──────────────┬──────────────────────┘
+               │
+               ▼
+     glma query --semantic "..."
+     glma embed
+```
 
 ## Notes
 
-- Phase 10 is scoped from `.Complete/todos/Complete/2026-04-11-truncate-oversized-chunks-before-summarization.md`
-- Phase 11 is scoped from `.Complete/todos/Complete/2026-04-13-add-markdown-key-value-export-format.md`
-- Phase 12 is scoped from `.Complete/todos/Complete/2026-04-10-pi-agent-integration-for-summarization.md`
-- The stale todo `2026-04-10-per-chunk-ai-summaries-from-local-llm.md` should be resolved (Phase 9 already shipped notebook cell summarization)
+- Ladybug (real_ladybug) has native vector index support — no new database dependency
+- Provider presets reuse the exact same pattern as `[summarize]` providers (PROVIDER_PRESETS dict)
+- Chunk summaries must exist before embedding — `glma embed` warns if no summaries found
+- Embedding happens after indexing, not during — keeps the pipeline decoupled
