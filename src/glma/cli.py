@@ -639,3 +639,110 @@ def embed(
     # Exit code: 0 if all embedded (or nothing to do), 1 if any failures
     if result.failed > 0:
         raise typer.Exit(1)
+
+
+@app.command()
+def search(
+    query_text: str = typer.Argument(..., help="Natural language search query."),
+    search_mode: str = typer.Option("hybrid", "--search-mode", help="Search strategy: hybrid, vector, keyword."),
+    output_format: str = typer.Option("markdown", "--format", "-f", help="Output format: markdown, markdown-kv, json, yaml."),
+    output: Optional[str] = typer.Option(None, "--output", "-o", help="Output file path (default: stdout)."),
+    repo_root: Optional[Path] = typer.Option(None, "--repo", "-r", help="Repo root directory (auto-detected)."),
+    embedding_provider: Optional[str] = typer.Option(None, "--embedding-provider", help="Embedding provider preset name."),
+    embedding_model: Optional[str] = typer.Option(None, "--embedding-model", help="Model name for embeddings."),
+    embedding_base_url: Optional[str] = typer.Option(None, "--embedding-base-url", help="API base URL for embedding provider."),
+    vector_dimensions: Optional[int] = typer.Option(None, "--vector-dimensions", help="Embedding vector dimensions."),
+    similarity_threshold: Optional[float] = typer.Option(None, "--similarity-threshold", help="Minimum similarity score for results (0.0-1.0)."),
+    quiet: bool = typer.Option(False, "--quiet", "-q", help="Suppress progress output."),
+) -> None:
+    """Search indexed code using hybrid keyword + vector similarity."""
+    from glma.models import ExportFormat
+
+    # Validate search mode
+    valid_modes = {"hybrid", "vector", "keyword"}
+    if search_mode not in valid_modes:
+        sys.stderr.write(f"Error: search-mode must be one of: {', '.join(sorted(valid_modes))}\n")
+        raise typer.Exit(4)
+
+    # Validate format
+    try:
+        fmt = ExportFormat(output_format)
+    except ValueError:
+        valid = ", ".join(f.value for f in ExportFormat)
+        sys.stderr.write(f"Error: format must be one of: {valid}\n")
+        raise typer.Exit(4)
+
+    # Resolve repo root
+    if repo_root:
+        repo_root_path = repo_root.resolve()
+    else:
+        repo_root_path = Path.cwd()
+        found = False
+        for parent in [repo_root_path] + list(repo_root_path.parents):
+            if (parent / ".glma-index").is_dir() or (parent / ".glma.toml").is_file():
+                repo_root_path = parent
+                found = True
+                break
+        if not found:
+            sys.stderr.write("Error: Not inside an indexed repository. Use --repo to specify root.\n")
+            raise typer.Exit(4)
+
+    # Validate index exists
+    db_path = repo_root_path / ".glma-index" / "db" / "index.lbug"
+    if not db_path.exists():
+        sys.stderr.write("No index found. Run `glma index` first.\n")
+        raise typer.Exit(4)
+
+    # Build search CLI overrides
+    from glma.config import load_search_config
+    search_overrides: dict = {}
+    if embedding_provider:
+        search_overrides["embedding_provider"] = embedding_provider
+    if embedding_model:
+        search_overrides["embedding_model"] = embedding_model
+    if embedding_base_url:
+        search_overrides["embedding_base_url"] = embedding_base_url
+    if vector_dimensions is not None:
+        search_overrides["vector_dimensions"] = vector_dimensions
+    if similarity_threshold is not None:
+        search_overrides["similarity_threshold"] = similarity_threshold
+
+    # Load search config
+    search_cfg = load_search_config(repo_root_path, search_overrides)
+
+    # Instantiate embedding provider
+    from glma.embedding.providers import OpenAIEmbeddingProvider
+    try:
+        provider = OpenAIEmbeddingProvider(
+            base_url=search_cfg.embedding_base_url,
+            model=search_cfg.embedding_model,
+        )
+    except ImportError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+    # Open database and run search
+    from glma.db.ladybug_store import LadybugStore
+    from glma.search.engine import HybridSearchEngine
+    from glma.search.formatter import format_search_output
+
+    store = LadybugStore(db_path)
+    engine = HybridSearchEngine(store, provider, search_cfg)
+
+    try:
+        results = engine.search(query_text, mode=search_mode)
+    except ValueError as e:
+        sys.stderr.write(f"{e}\n")
+        raise typer.Exit(1)
+
+    # Handle empty results
+    if not results:
+        sys.stderr.write(f"No results above threshold {search_cfg.similarity_threshold}. Try lowering --similarity-threshold.\n")
+        raise typer.Exit(0)
+
+    # Format and output
+    formatted = format_search_output(results, output_format, query_text, search_mode)
+    _write_output(formatted, output)
+
+    if not quiet:
+        sys.stderr.write(f"Found {len(results)} results\n")

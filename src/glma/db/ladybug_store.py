@@ -543,6 +543,112 @@ class LadybugStore:
             ))
         return chunks
 
+    def ensure_vector_extension(self) -> None:
+        """Install and load the LadybugDB vector extension for HNSW search."""
+        self.conn.execute("INSTALL vector;")
+        self.conn.execute("LOAD vector;")
+
+    def create_vector_index(self, dimensions: int = 768) -> None:
+        """Create or recreate the HNSW vector index on chunk embeddings.
+
+        Drops existing index first to handle staleness after re-embedding.
+        Idempotent — safe to call multiple times.
+
+        Args:
+            dimensions: Embedding vector dimensions (for future use / validation).
+        """
+        self.ensure_vector_extension()
+        # Drop existing index if it exists
+        try:
+            self.conn.execute("CALL DROP_VECTOR_INDEX('Chunk', 'chunk_embedding_index');")
+        except Exception:
+            pass  # Index doesn't exist yet — expected
+        # Create fresh HNSW index with cosine metric
+        self.conn.execute("""
+            CALL CREATE_VECTOR_INDEX(
+                'Chunk',
+                'chunk_embedding_index',
+                'embedding',
+                metric := 'cosine'
+            );
+        """)
+
+    def has_embeddings(self) -> bool:
+        """Check if any chunks in the database have embeddings."""
+        result = self.conn.execute(
+            "MATCH (c:Chunk) WHERE c.embedding IS NOT NULL RETURN COUNT(c) LIMIT 1"
+        )
+        rows = list(result)
+        return rows[0][0] > 0 if rows else False
+
+    def vector_search(self, query_vector: list[float], k: int = 20) -> list[dict]:
+        """Run HNSW vector similarity search against chunk embeddings.
+
+        Args:
+            query_vector: Embedding vector for the search query.
+            k: Number of nearest neighbors to return.
+
+        Returns:
+            List of dicts with keys: id, file_path, name, chunk_type, content, summary,
+            start_line, end_line, vector_score (1 - cosine_distance).
+        """
+        self.ensure_vector_extension()
+        result = self.conn.execute("""
+            CALL QUERY_VECTOR_INDEX(
+                'Chunk',
+                'chunk_embedding_index',
+                $query_vec,
+                $k
+            )
+            RETURN node.id, node.file_path, node.name, node.chunk_type,
+                   node.content, node.summary, node.start_line, node.end_line,
+                   distance
+            ORDER BY distance
+        """, {"query_vec": query_vector, "k": k})
+        results = []
+        for row in result:
+            distance = row[8]
+            vector_score = 1.0 - distance  # cosine distance to similarity
+            results.append({
+                "id": row[0],
+                "file_path": row[1],
+                "name": row[2],
+                "chunk_type": row[3],
+                "content": row[4],
+                "summary": row[5] or "",
+                "start_line": row[6],
+                "end_line": row[7],
+                "vector_score": max(0.0, vector_score),  # clamp negative similarities
+            })
+        return results
+
+    def get_chunks_with_summaries_for_keyword(self) -> list[dict]:
+        """Get all chunks with non-empty summaries for fuzzy keyword matching.
+
+        Returns lightweight dicts — only fields needed for search + scoring,
+        not full Chunk objects.
+        """
+        result = self.conn.execute("""
+            MATCH (c:Chunk)
+            WHERE c.summary <> ""
+            RETURN c.id, c.file_path, c.name, c.chunk_type,
+                   c.content, c.summary, c.start_line, c.end_line
+            ORDER BY c.file_path, c.start_line
+        """)
+        return [
+            {
+                "id": row[0],
+                "file_path": row[1],
+                "name": row[2],
+                "chunk_type": row[3],
+                "content": row[4],
+                "summary": row[5],
+                "start_line": row[6],
+                "end_line": row[7],
+            }
+            for row in result
+        ]
+
     def close(self) -> None:
         """Close the database connection."""
         del self.conn
