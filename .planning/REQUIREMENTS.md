@@ -60,12 +60,12 @@ Requirements for Hybrid Semantic Search milestone. Each maps to roadmap phases.
 
 ### Hybrid Search
 
-- [ ] **SRCH-01**: Hybrid search combining Ladybug full-text keyword search + vector similarity, with configurable weighting
-- [ ] **SRCH-02**: `glma query --semantic "<natural language query>"` CLI flag that triggers embedding the query + hybrid search
-- [ ] **SRCH-03**: Results ranked by combined hybrid score (keyword_weight × keyword_score + vector_weight × vector_score)
-- [ ] **SRCH-04**: Similarity threshold filtering — results below `similarity_threshold` are excluded
-- [ ] **SRCH-05**: Query results include relevance score in output (markdown and JSON formats)
-- [ ] **SRCH-06**: `--search-mode` flag supporting `hybrid` (default), `vector`, `keyword` to force a specific search strategy
+- [x] **SRCH-01**: Hybrid search combining Ladybug full-text keyword search + vector similarity, with configurable weighting
+- [x] **SRCH-02**: `glma query --semantic "<natural language query>"` CLI flag that triggers embedding the query + hybrid search
+- [x] **SRCH-03**: Results ranked by combined hybrid score (keyword_weight × keyword_score + vector_weight × vector_score)
+- [x] **SRCH-04**: Similarity threshold filtering — results below `similarity_threshold` are excluded
+- [x] **SRCH-05**: Query results include relevance score in output (markdown and JSON formats)
+- [x] **SRCH-06**: `--search-mode` flag supporting `hybrid` (default), `vector`, `keyword` to force a specific search strategy
 
 ## Deferred
 
@@ -140,12 +140,12 @@ Which phases cover which requirements. Updated during roadmap creation.
 | VEC-03 | Phase 14 | Pending |
 | VEC-04 | Phase 14 | Pending |
 | VEC-05 | Phase 14 | Pending |
-| SRCH-01 | Phase 15 | Pending |
-| SRCH-02 | Phase 15 | Pending |
-| SRCH-03 | Phase 15 | Pending |
-| SRCH-04 | Phase 15 | Pending |
-| SRCH-05 | Phase 15 | Pending |
-| SRCH-06 | Phase 15 | Pending |
+| SRCH-01 | Phase 15 | ✓ Complete |
+| SRCH-02 | Phase 15 | ✓ Complete |
+| SRCH-03 | Phase 15 | ✓ Complete |
+| SRCH-04 | Phase 15 | ✓ Complete |
+| SRCH-05 | Phase 15 | ✓ Complete |
+| SRCH-06 | Phase 15 | ✓ Complete |
 
 **Coverage:**
 - v1.0 requirements: 15 total (all complete)

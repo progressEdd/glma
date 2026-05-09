@@ -12,7 +12,7 @@ Add hybrid keyword + vector search on chunk summaries so agents can find relevan
 
 - [x] **Phase 13: Embedding Infrastructure** - Provider protocol, presets, config, .glma.toml [search] section
 - [x] **Phase 14: Vector Storage & Embedding Command** - Ladybug vector index, `glma embed`, incremental embedding
-- [ ] **Phase 15: Hybrid Search & Query Integration** - Hybrid keyword+vector search, `--semantic` flag, result ranking
+- [x] **Phase 15: Hybrid Search & Query Integration** - Hybrid keyword+vector search, `--semantic` flag, result ranking
 
 ## Phase Details
 
@@ -63,7 +63,7 @@ Phases execute in numeric order: 13 → 14 → 15
 |-------|----------------|--------|-----------|
 | 13. Embedding Infrastructure | 1/1 | ✓ Complete | 2026-05-09 |
 | 14. Vector Storage & Embedding Command | 2/2 | ✓ Complete | 2026-05-09 |
-| 15. Hybrid Search & Query Integration | 0/? | Not started | — |
+| 15. Hybrid Search & Query Integration | 1/1 | ✓ Complete | 2026-05-09 |
 
 ## Architecture Overview
 
