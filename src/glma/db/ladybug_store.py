@@ -23,6 +23,9 @@ class LadybugStore:
         end_line INT64,
         content_hash STRING,
         parent_id STRING,
+        embedding FLOAT[768],
+        summary_hash STRING,
+        vector_dimensions INT64,
         PRIMARY KEY (id)
     )
     """
@@ -57,6 +60,7 @@ class LadybugStore:
         self.db = Database(str(db_path))
         self.conn = Connection(self.db)
         self._init_schema()
+        self._migrate_schema()
 
     def _init_schema(self) -> None:
         """Create tables if they don't exist."""
@@ -64,6 +68,19 @@ class LadybugStore:
         self.conn.execute(self.SCHEMA_FILES)
         self.conn.execute(self.SCHEMA_CONTAINS)
         self.conn.execute(self.SCHEMA_RELATES_TO)
+
+    def _migrate_schema(self) -> None:
+        """Add embedding columns to Chunk table if they don't exist (migration for existing databases)."""
+        migrations = [
+            "ALTER TABLE Chunk ADD embedding FLOAT[768]",
+            "ALTER TABLE Chunk ADD summary_hash STRING",
+            "ALTER TABLE Chunk ADD vector_dimensions INT64",
+        ]
+        for sql in migrations:
+            try:
+                self.conn.execute(sql)
+            except Exception:
+                pass  # Column already exists — expected on repeat runs
 
     def upsert_file(self, record: FileRecord) -> None:
         """Insert or update a file record. Uses detach delete+re-insert pattern."""
@@ -102,10 +119,21 @@ class LadybugStore:
         existing = self.get_chunks_for_file(file_path)
         summary_map = {c.content_hash: c.summary for c in existing if c.summary}
 
+        # Preserve existing embeddings keyed by content_hash
+        embedding_map: dict[str, tuple] = {}
+        for c in existing:
+            if hasattr(c, 'embedding') and c.embedding:
+                embedding_map[c.content_hash] = (c.embedding, c.summary_hash, c.vector_dimensions)
+
         # Apply preserved summaries to incoming chunks
         for chunk in chunks:
             if not chunk.summary and chunk.content_hash in summary_map:
                 chunk.summary = summary_map[chunk.content_hash]
+            if chunk.content_hash in embedding_map:
+                emb_data = embedding_map[chunk.content_hash]
+                chunk.embedding = emb_data[0]
+                chunk.summary_hash = emb_data[1]
+                chunk.vector_dimensions = emb_data[2]
 
         # Remove old chunks and their CONTAINS edges
         self.conn.execute(
@@ -120,20 +148,26 @@ class LadybugStore:
             # Ladybug doesn't accept None - use empty string for nullable fields
             data["summary"] = data.get("summary") or ""
             data["parent_id"] = data.get("parent_id") or ""
+
+            # Build CREATE data — include base columns always
+            create_data = {
+                "id": data["id"], "file_path": data["file_path"], "chunk_type": data["chunk_type"],
+                "name": data["name"], "content": data["content"], "summary": data.get("summary") or "",
+                "start_line": data["start_line"], "end_line": data["end_line"],
+                "content_hash": data["content_hash"], "parent_id": data.get("parent_id") or "",
+            }
+            create_cols = ", ".join(f"{k}: ${k}" for k in create_data)
+
+            # Add embedding fields only if preserved from previous index
+            if chunk.embedding:
+                create_data["embedding"] = chunk.embedding
+                create_data["summary_hash"] = chunk.summary_hash or ""
+                create_data["vector_dimensions"] = chunk.vector_dimensions or 0
+                create_cols += ", embedding: $embedding, summary_hash: $summary_hash, vector_dimensions: $vector_dimensions"
+
             self.conn.execute(
-                """CREATE (c:Chunk {
-                    id: $id,
-                    file_path: $file_path,
-                    chunk_type: $chunk_type,
-                    name: $name,
-                    content: $content,
-                    summary: $summary,
-                    start_line: $start_line,
-                    end_line: $end_line,
-                    content_hash: $content_hash,
-                    parent_id: $parent_id
-                })""",
-                data,
+                f"CREATE (c:Chunk {{ {create_cols} }})",
+                create_data,
             )
         # Create CONTAINS edges
         if chunks:
@@ -300,7 +334,8 @@ class LadybugStore:
         result = self.conn.execute(
             """MATCH (c:Chunk {file_path: $fp})
             RETURN c.id, c.name, c.chunk_type, c.file_path, c.content, c.summary,
-                   c.start_line, c.end_line, c.content_hash, c.parent_id
+                   c.start_line, c.end_line, c.content_hash, c.parent_id,
+                   c.embedding, c.summary_hash, c.vector_dimensions
             ORDER BY c.start_line""",
             {"fp": file_path},
         )
@@ -311,6 +346,9 @@ class LadybugStore:
                 file_path=row[3], content=row[4], summary=row[5] or None,
                 start_line=row[6], end_line=row[7], content_hash=row[8],
                 parent_id=row[9] or None,
+                embedding=row[10] if row[10] else None,
+                summary_hash=row[11] if row[11] else None,
+                vector_dimensions=row[12] if row[12] else None,
             ))
         return chunks
 
@@ -423,6 +461,58 @@ class LadybugStore:
                     queue.append((source_id, depth + 1))
 
         return results
+
+    def update_chunk_embedding(self, chunk_id: str, embedding: list[float], summary_hash: str, vector_dimensions: int) -> None:
+        """Update the embedding fields of a single chunk.
+
+        Does not delete or recreate the chunk — targeted field update only.
+
+        Args:
+            chunk_id: Unique chunk identifier (format: path::type::name::line).
+            embedding: Float vector from the embedding provider.
+            summary_hash: BLAKE2b hash of the summary text at embed time.
+            vector_dimensions: Configured dimension count at embed time.
+        """
+        self.conn.execute(
+            "MATCH (c:Chunk {id: $cid}) SET c.embedding = $emb, c.summary_hash = $hash, c.vector_dimensions = $dims",
+            {"cid": chunk_id, "emb": embedding, "hash": summary_hash, "dims": vector_dimensions},
+        )
+
+    def get_chunks_needing_embedding(self, vector_dimensions: int) -> list[Chunk]:
+        """Get all chunks that have a non-empty summary but need embedding or re-embedding.
+
+        A chunk needs embedding if:
+        - summary is non-empty AND
+        - embedding is NULL OR summary_hash is NULL OR vector_dimensions doesn't match config
+
+        Args:
+            vector_dimensions: Current configured dimensions to compare against.
+
+        Returns:
+            List of Chunk objects needing embedding.
+        """
+        result = self.conn.execute(
+            """MATCH (c:Chunk)
+            WHERE c.summary <> "" AND (
+                c.embedding IS NULL
+                OR c.summary_hash IS NULL
+                OR c.vector_dimensions IS NULL
+                OR c.vector_dimensions <> $dims
+            )
+            RETURN c.id, c.name, c.chunk_type, c.file_path, c.content, c.summary,
+                   c.start_line, c.end_line, c.content_hash, c.parent_id
+            ORDER BY c.file_path, c.start_line""",
+            {"dims": vector_dimensions},
+        )
+        chunks = []
+        for row in result:
+            chunks.append(Chunk(
+                id=row[0], name=row[1], chunk_type=ChunkType(row[2]),
+                file_path=row[3], content=row[4], summary=row[5] or None,
+                start_line=row[6], end_line=row[7], content_hash=row[8],
+                parent_id=row[9] or None,
+            ))
+        return chunks
 
     def close(self) -> None:
         """Close the database connection."""

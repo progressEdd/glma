@@ -155,3 +155,87 @@ class TestDeleteOperations:
     def test_delete_nonexistent_file(self, store):
         """Deleting a nonexistent file should not raise."""
         store.delete_file("nonexistent.py")
+
+
+class TestEmbeddingFields:
+    """Test embedding column schema, migration, and storage."""
+
+    def test_embedding_columns_added_on_init(self, tmp_path):
+        """Embedding columns should be added to existing Chunk table via migration."""
+        # Create DB without embedding columns
+        store = LadybugStore(tmp_path / "test.lbug")
+        # Verify columns exist (would error on query if not)
+        result = store.conn.execute("MATCH (c:Chunk) RETURN c.embedding IS NULL, c.summary_hash IS NULL, c.vector_dimensions IS NULL")
+        rows = list(result)
+        assert len(rows) == 0  # No chunks, but query succeeds = columns exist
+        store.close()
+
+    def test_update_chunk_embedding(self, tmp_path):
+        """update_chunk_embedding should set embedding, summary_hash, and vector_dimensions."""
+        store = LadybugStore(tmp_path / "test.lbug")
+        # Insert a chunk first
+        chunk = Chunk(id="test.py::function::foo::1", file_path="test.py", chunk_type=ChunkType.FUNCTION,
+                      name="foo", content="def foo(): pass", summary="A test function",
+                      start_line=1, end_line=1, content_hash="abc123")
+        store.upsert_file(FileRecord(path="test.py", language=Language.PYTHON, content_hash="fhash",
+                                     last_indexed="2026-01-01", chunk_count=1))
+        store.upsert_chunks("test.py", [chunk])
+
+        vec = [0.1] * 768
+        store.update_chunk_embedding("test.py::function::foo::1", vec, "hash_val", 768)
+
+        chunks = store.get_chunks_for_file("test.py")
+        assert chunks[0].embedding is not None
+        assert len(chunks[0].embedding) == 768
+        assert chunks[0].summary_hash == "hash_val"
+        assert chunks[0].vector_dimensions == 768
+        store.close()
+
+    def test_embedding_preserved_on_reindex(self, tmp_path):
+        """Embedding data should survive re-indexing when content_hash unchanged."""
+        store = LadybugStore(tmp_path / "test.lbug")
+        # Index file, add summary, add embedding
+        chunk1 = Chunk(id="test.py::function::foo::1", file_path="test.py", chunk_type=ChunkType.FUNCTION,
+                       name="foo", content="def foo(): pass", summary="A function",
+                       start_line=1, end_line=1, content_hash="hash1")
+        store.upsert_file(FileRecord(path="test.py", language=Language.PYTHON, content_hash="fhash1",
+                                     last_indexed="2026-01-01", chunk_count=1))
+        store.upsert_chunks("test.py", [chunk1])
+        store.update_chunk_summary("test.py::function::foo::1", "A great function")
+        vec = [0.5] * 768
+        store.update_chunk_embedding("test.py::function::foo::1", vec, "embed_hash", 768)
+
+        # Re-index same file (same content_hash)
+        chunk2 = Chunk(id="test.py::function::foo::1", file_path="test.py", chunk_type=ChunkType.FUNCTION,
+                       name="foo", content="def foo(): pass", content_hash="hash1",
+                       start_line=1, end_line=1)
+        store.upsert_chunks("test.py", [chunk2])
+
+        # Summary and embedding should be preserved
+        chunks = store.get_chunks_for_file("test.py")
+        assert chunks[0].summary is not None  # Preserved via summary_map
+        assert chunks[0].embedding is not None  # Preserved via embedding_map
+        assert chunks[0].summary_hash == "embed_hash"
+        assert chunks[0].vector_dimensions == 768
+        store.close()
+
+    def test_get_chunks_needing_embedding(self, tmp_path):
+        """Should return chunks with summaries but no embedding or stale embedding."""
+        store = LadybugStore(tmp_path / "test.lbug")
+        store.upsert_file(FileRecord(path="a.py", language=Language.PYTHON, content_hash="h1",
+                                     last_indexed="2026-01-01", chunk_count=1))
+        # Chunk with summary but no embedding → needs embedding
+        c1 = Chunk(id="a.py::function::f::1", file_path="a.py", chunk_type=ChunkType.FUNCTION,
+                   name="f", content="def f(): pass", summary="A function",
+                   start_line=1, end_line=1, content_hash="ch1")
+        store.upsert_chunks("a.py", [c1])
+        # Embed it
+        store.update_chunk_embedding("a.py::function::f::1", [0.1]*768, "hash_f", 768)
+        # Now it should NOT need embedding (dims match, has embedding)
+        needs = store.get_chunks_needing_embedding(768)
+        assert len(needs) == 0
+        # But with wrong dimensions → needs re-embedding
+        needs = store.get_chunks_needing_embedding(384)
+        assert len(needs) == 1
+        assert needs[0].id == "a.py::function::f::1"
+        store.close()

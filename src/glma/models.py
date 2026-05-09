@@ -33,6 +33,9 @@ class Chunk(BaseModel):
     end_line: int = Field(..., ge=1, description="1-indexed end line")
     content_hash: str = Field(..., description="BLAKE2b hash of the content")
     parent_id: Optional[str] = Field(None, description="ID of parent chunk (method → class)")
+    embedding: Optional[list[float]] = Field(None, description="Embedding vector from chunk summary")
+    summary_hash: Optional[str] = Field(None, description="BLAKE2b hash of summary text at embed time")
+    vector_dimensions: Optional[int] = Field(None, description="Configured dimension count at embed time")
     attached_comments: list[str] = Field(default_factory=list, description="Comments attached to this chunk")
 
 
