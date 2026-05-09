@@ -498,3 +498,144 @@ def export(
 
     store = LadybugStore(db_path)
     export_index(repo_path, export_config, store, console=console)
+
+
+@app.command()
+def embed(
+    path: Optional[Path] = typer.Argument(
+        None,
+        help="Path to indexed repository. Defaults to current directory.",
+    ),
+    embedding_provider: Optional[str] = typer.Option(
+        None,
+        "--embedding-provider",
+        help="Embedding provider preset name (e.g., embed-ollama, embed-lmstudio).",
+    ),
+    embedding_model: Optional[str] = typer.Option(
+        None,
+        "--embedding-model",
+        help="Model name for embeddings (overrides config).",
+    ),
+    embedding_base_url: Optional[str] = typer.Option(
+        None,
+        "--embedding-base-url",
+        help="API base URL for embedding provider (overrides config).",
+    ),
+    vector_dimensions: Optional[int] = typer.Option(
+        None,
+        "--vector-dimensions",
+        help="Embedding vector dimensions (must match model output).",
+    ),
+    force: bool = typer.Option(
+        False,
+        "--force",
+        help="Re-embed chunks even if summary hash matches (still skips chunks without summaries).",
+    ),
+    quiet: bool = typer.Option(
+        False,
+        "--quiet",
+        "-q",
+        help="Suppress progress output.",
+    ),
+) -> None:
+    """Generate embedding vectors for chunk summaries and store in the index."""
+    from glma.config import load_config, load_search_config
+    from glma.db.ladybug_store import LadybugStore
+    from glma.embedding.pipeline import embed_chunks
+    from glma.embedding.providers import OpenAIEmbeddingProvider
+
+    repo_path = path.resolve() if path else Path.cwd()
+
+    # Validate index exists
+    index_config = load_config(repo_path)
+    db_path = repo_path / index_config.output_dir / "db" / "index.lbug"
+    if not db_path.exists():
+        console.print("[red]Error:[/red] No index found. Run `glma index` first.")
+        raise typer.Exit(4)
+
+    # Build search CLI overrides
+    search_overrides: dict = {}
+    if embedding_provider:
+        search_overrides["embedding_provider"] = embedding_provider
+    if embedding_model:
+        search_overrides["embedding_model"] = embedding_model
+    if embedding_base_url:
+        search_overrides["embedding_base_url"] = embedding_base_url
+    if vector_dimensions is not None:
+        search_overrides["vector_dimensions"] = vector_dimensions
+
+    # Load search config (file + CLI overrides)
+    search_cfg = load_search_config(repo_path, search_overrides)
+
+    # Instantiate embedding provider
+    try:
+        provider = OpenAIEmbeddingProvider(
+            base_url=search_cfg.embedding_base_url,
+            model=search_cfg.embedding_model,
+        )
+    except ImportError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+
+    if not quiet:
+        console.print(f"[bold]glma embed[/bold] with {search_cfg.embedding_provider} ({search_cfg.embedding_model})")
+        console.print(f"  Dimensions: {search_cfg.vector_dimensions}")
+
+    # Open database and run embedding pipeline
+    store = LadybugStore(db_path)
+
+    # Rich progress display
+    from rich.progress import Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
+
+    progress_obj = None
+    task_id = None
+
+    def on_batch_progress(batch_num, total_batches, embedded, skipped, failed):
+        nonlocal task_id
+        if progress_obj and task_id is not None:
+            progress_obj.update(task_id, completed=batch_num, description=f"Embedding batch {batch_num}/{total_batches}")
+
+    if not quiet:
+        # We don't know total batches upfront, so show a simple spinner + counter
+        progress_obj = Progress(
+            SpinnerColumn(),
+            TextColumn("[bold blue]{task.description}"),
+            TimeElapsedColumn(),
+            console=console,
+        )
+        progress_obj.start()
+        task_id = progress_obj.add_task("Embedding chunks...", total=None)
+
+    try:
+        result = embed_chunks(
+            store=store,
+            provider=provider,
+            config=search_cfg,
+            force=force,
+            progress_callback=on_batch_progress if not quiet else None,
+        )
+    except Exception as e:
+        if progress_obj:
+            progress_obj.stop()
+        console.print(f"[red]Error:[/red] Embedding failed: {e}")
+        raise typer.Exit(1)
+    finally:
+        if progress_obj:
+            progress_obj.stop()
+
+    # Print summary
+    if not quiet:
+        console.print()
+        console.print(f"  Embedded:  {result.embedded}")
+        console.print(f"  Skipped:   {result.skipped}")
+        console.print(f"  Failed:    {result.failed}")
+        if result.failed_chunk_ids:
+            console.print(f"  Failed chunks:")
+            for cid in result.failed_chunk_ids[:10]:
+                console.print(f"    {cid}")
+            if len(result.failed_chunk_ids) > 10:
+                console.print(f"    ... and {len(result.failed_chunk_ids) - 10} more")
+
+    # Exit code: 0 if all embedded (or nothing to do), 1 if any failures
+    if result.failed > 0:
+        raise typer.Exit(1)

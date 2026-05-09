@@ -514,6 +514,35 @@ class LadybugStore:
             ))
         return chunks
 
+    def get_all_chunks_with_summaries(self) -> list[Chunk]:
+        """Get all chunks that have a non-empty summary.
+
+        Used by force-embed mode to re-embed all chunks regardless of current state.
+
+        Returns:
+            List of Chunk objects with non-empty summaries.
+        """
+        result = self.conn.execute(
+            """MATCH (c:Chunk)
+            WHERE c.summary <> ""
+            RETURN c.id, c.name, c.chunk_type, c.file_path, c.content, c.summary,
+                   c.start_line, c.end_line, c.content_hash, c.parent_id,
+                   c.embedding, c.summary_hash, c.vector_dimensions
+            ORDER BY c.file_path, c.start_line"""
+        )
+        chunks = []
+        for row in result:
+            chunks.append(Chunk(
+                id=row[0], name=row[1], chunk_type=ChunkType(row[2]),
+                file_path=row[3], content=row[4], summary=row[5] or None,
+                start_line=row[6], end_line=row[7], content_hash=row[8],
+                parent_id=row[9] or None,
+                embedding=row[10] if row[10] else None,
+                summary_hash=row[11] if row[11] else None,
+                vector_dimensions=row[12] if row[12] else None,
+            ))
+        return chunks
+
     def close(self) -> None:
         """Close the database connection."""
         del self.conn
