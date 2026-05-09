@@ -8,7 +8,7 @@
 
 Add `glma search "natural language query"` as a new top-level CLI command that performs hybrid keyword + vector search across all chunk summaries in the database. Results are ranked by combined fuzzy keyword similarity and vector cosine similarity with configurable weights. Includes `--search-mode hybrid|vector|keyword` for strategy control.
 
-This phase delivers: `glma search` command, hybrid search engine (fuzzy + vector), result formatting across all output formats, search mode flag, threshold filtering.
+This phase delivers: `glma search` command, hybrid search engine (fuzzy + LadybugDB native HNSW vector search), result formatting across all output formats, search mode flag, threshold filtering.
 
 No changes to existing `glma query` command. No auto-embedding during search. No query rewriting.
 
@@ -36,23 +36,34 @@ No changes to existing `glma query` command. No auto-embedding during search. No
 - **D-09:** Results below `similarity_threshold` are filtered out entirely.
 - **D-10:** When no results pass the threshold: empty output with actionable message telling user to try lowering `--similarity-threshold`. No silent fallback to low-quality results.
 
+### Vector Search (LadybugDB Native)
+- **D-11:** Use LadybugDB's native **HNSW vector index** for vector similarity search — NOT brute-force `array_cosine_similarity()` full scans. This gives sub-linear O(log n) search via `QUERY_VECTOR_INDEX`.
+- **D-12:** Requires loading the Ladybug vector extension: `INSTALL vector; LOAD vector;` before creating or querying the index.
+- **D-13:** Vector index created on the `Chunk` table's `embedding` property using `CALL CREATE_VECTOR_INDEX('Chunk', 'chunk_embedding_index', 'embedding', metric := 'cosine')`. Default HNSW parameters should work for codebase scale.
+- **D-14:** Vector search via `CALL QUERY_VECTOR_INDEX('Chunk', 'chunk_embedding_index', $query_vec, K) RETURN node, distance`. Returns `node` (full Chunk) and `distance` (similarity score).
+- **D-15:** Vector index creation should happen during `glma embed` (after embeddings are stored) or as a separate step. Index must be rebuilt/recreated when embeddings change significantly.
+- **D-16:** The HNSW approach enables future pre-filtering (e.g., `PROJECT_GRAPH` to restrict search to certain files) and combining vector results with graph traversals in a single Cypher query.
+
 ### Keyword Fuzzy Matching
-- **D-11:** Keyword component uses **fuzzywuzzy** for fuzzy string similarity between the query and chunk summaries. Exact fuzzy function (token_sort_ratio, partial_ratio, etc.) left to planning/research.
-- **D-12:** All chunks with summaries are compared against the query string using fuzzy matching. No pre-filtering or indexing for keyword mode — brute-force comparison.
+- **D-17:** Keyword component uses **fuzzywuzzy** for fuzzy string similarity between the query and chunk summaries. Exact fuzzy function (token_sort_ratio, partial_ratio, etc.) left to planning/research.
+- **D-18:** All chunks with summaries are compared against the query string using fuzzy matching. Brute-force comparison in Python (acceptable for keyword mode at codebase scale).
 
 ### Search Mode Fallbacks
-- **D-13:** `--search-mode vector` when no embeddings exist in the database: explicit error with actionable message ("No embeddings found. Run `glma embed` first."). No silent fallback to keyword mode.
-- **D-14:** `--search-mode keyword` works without embeddings — only needs summaries, which are always present after indexing + summarization.
-- **D-15:** `--search-mode hybrid` when no embeddings exist: same error as vector mode, since hybrid requires vector scoring.
+- **D-19:** `--search-mode vector` when no embeddings exist in the database: explicit error with actionable message ("No embeddings found. Run `glma embed` first."). No silent fallback to keyword mode.
+- **D-20:** `--search-mode keyword` works without embeddings — only needs summaries, which are always present after indexing + summarization.
+- **D-21:** `--search-mode hybrid` when no embeddings exist: same error as vector mode, since hybrid requires vector scoring.
+- **D-22:** If vector index doesn't exist but embeddings do, create the index on-the-fly during search (or error with actionable message).
 
 ### Agent's Discretion
 - Exact fuzzywuzzy similarity function (token_sort_ratio, partial_ratio, etc.)
+- HNSW index parameters (mu, ml, pu, efc, efs) — defaults should be fine for codebase scale
+- When to create the vector index (during `glma embed`, lazily on first search, or separate command)
+- How to handle index staleness (embeddings updated but index not rebuilt)
 - How to structure the search module (new `search/` directory, or extend existing modules)
 - Exact result format for each output type (json, yaml, markdown, markdown-kv)
 - Whether to add `--similarity-threshold` and `--search-mode` flags or only support them via config
 - How many results to return by default (top N, or all above threshold)
 - Test structure and coverage specifics
-- Whether fuzzy matching is done in Python or pushed to Cypher
 
 </decisions>
 
@@ -67,7 +78,8 @@ No changes to existing `glma query` command. No auto-embedding during search. No
 - `02-worktrees/glma/src/glma/config.py` — `load_search_config()` for provider preset resolution, config file loading, CLI override merging
 
 ### Database layer (query patterns)
-- `02-worktrees/glma/src/glma/db/ladybug_store.py` — `LadybugStore` class with `get_all_chunks_with_summaries()`, `get_chunks_for_file()`, embedding columns on Chunk table. `array_cosine_similarity()` confirmed working in Cypher. **No native vector index** — brute-force similarity.
+- `02-worktrees/glma/src/glma/db/ladybug_store.py` — `LadybugStore` class with `get_all_chunks_with_summaries()`, `get_chunks_for_file()`, embedding columns on Chunk table (`embedding FLOAT[768]`).
+- `.planning/todos/pending/ladybug-vector.md` — **LadybugDB vector search documentation.** Covers HNSW index creation (`CREATE_VECTOR_INDEX`), querying (`QUERY_VECTOR_INDEX`), pre-filtering (`PROJECT_GRAPH`, `PROJECT_GRAPH_CYPHER`), post-filtering, graph traversal from results. MUST read before implementing search engine.
 
 ### CLI patterns (must follow)
 - `02-worktrees/glma/src/glma/cli.py` — Typer command pattern, `@app.command()`, config loading in CLI context, provider instantiation, `glma embed` command as closest reference for new `glma search` command
@@ -75,7 +87,7 @@ No changes to existing `glma query` command. No auto-embedding during search. No
 
 ### Prior phase decisions (constraints)
 - `.planning/phases/13-embedding-infrastructure/13-CONTEXT.md` — Embedding provider protocol, config structure, preset naming
-- `.planning/phases/14-vector-storage-embedding-command/14-CONTEXT.md` — Vector storage model, Ladybug schema with embedding columns, confirmed no native vector index in real_ladybug 0.15.3
+- `.planning/phases/14-vector-storage-embedding-command/14-CONTEXT.md` — Vector storage model, Ladybug schema with embedding columns. NOTE: Phase 14 context states "no native vector index" — this is outdated. LadybugDB supports HNSW vector indexes via the vector extension (see `ladybug-vector.md`).
 
 ### Project conventions
 - `.planning/codebase/CONVENTIONS.md` — Typer CLI pattern, Pydantic config models
@@ -93,20 +105,23 @@ No changes to existing `glma query` command. No auto-embedding during search. No
 ### Reusable Assets
 - **`OpenAIEmbeddingProvider`** (`embedding/providers.py`): `embed()` method ready to use for query embedding. Takes `list[str]`, returns `list[list[float]]`.
 - **`load_search_config()`** (`config.py`): Fully working config loader for `[search]` section. Returns `SearchConfig` with weights, threshold, provider settings.
-- **`LadybugStore`** (`db/ladybug_store.py`): `get_all_chunks_with_summaries()` returns all chunks with non-empty summaries including their embeddings. This is the primary data source for search.
+- **`LadybugStore`** (`db/ladybug_store.py`): `get_all_chunks_with_summaries()` returns all chunks with non-empty summaries including their embeddings. Embedding columns already in schema (`embedding FLOAT[768]`).
 - **`SearchConfig`** (`models.py`): Already has `similarity_threshold`, `hybrid_keyword_weight`, `hybrid_vector_weight`, `vector_dimensions`.
 - **Output formatters** (`query/formatter.py`): `format_json_output()`, `format_kv_output()`, `format_compact_output()`, `format_yaml_output()` — patterns to follow for search result formatting.
 
 ### Established Patterns
-- **Cypher vector similarity**: `array_cosine_similarity(c.embedding, $query_vector)` works in real_ladybug. Brute-force — no index needed at codebase scale.
+- **LadybugDB native vector search**: `INSTALL vector; LOAD vector;` then `CREATE_VECTOR_INDEX` + `QUERY_VECTOR_INDEX` for HNSW-based ANN search. Sub-linear O(log n) performance. Returns `node` + `distance`.
+- **Vector index creation**: `CALL CREATE_VECTOR_INDEX('Chunk', 'index_name', 'embedding', metric := 'cosine')` on the `embedding` FLOAT[] column.
+- **Vector query**: `CALL QUERY_VECTOR_INDEX('Chunk', 'index_name', $query_vec, K) RETURN node, distance` — composable with Cypher via `WITH node, distance`.
 - **CLI command pattern**: Typer `@app.command()`, resolve repo root, load config, instantiate provider, Rich progress/error handling.
 - **Config loading**: `load_search_config()` resolves provider presets, merges file config with CLI overrides. Same pattern for search command.
 - **Output dispatch**: `--format` flag selects formatter. Same dispatch for search results.
 
 ### Integration Points
 - **`cli.py`**: Add new `search` command. Follow `embed` command pattern for provider instantiation and config loading.
-- **`ladybug_store.py`**: May need a new method for vector similarity query (Cypher with `array_cosine_similarity` + ORDER BY + LIMIT). Or the search engine can use `get_all_chunks_with_summaries()` and compute in Python.
-- **New `search/` module** (or extend existing): Hybrid search engine — embed query, compute vector similarity, compute fuzzy similarity, combine scores, filter by threshold, rank results, format output.
+- **`ladybug_store.py`**: Add vector index creation method (load extension, create index). Add vector search method wrapping `QUERY_VECTOR_INDEX`. May also need index management (check if index exists, drop/recreate).
+- **`cli.py` embed command**: Consider adding vector index creation after embedding completes.
+- **New `search/` module** (or extend existing): Hybrid search engine — embed query, run HNSW vector search, compute fuzzy similarity, combine scores, filter by threshold, rank results, format output.
 
 </code_context>
 
