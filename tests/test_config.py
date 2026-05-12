@@ -22,7 +22,7 @@ class TestDefaultConfig:
 
     def test_defaults_applied(self, tmp_path):
         cfg = load_config(tmp_path)
-        assert cfg.languages == [Language.C, Language.CPP, Language.TYPESCRIPT, Language.TSX, Language.RUST, Language.PYTHON]
+        assert cfg.languages == [Language.C, Language.PYTHON]
         assert cfg.output_dir == ".glma-index"
         assert cfg.quiet is False
         assert ".git" in cfg.exclude

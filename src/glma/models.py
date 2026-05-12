@@ -224,7 +224,7 @@ class ExportConfig(BaseModel):
 class IndexConfig(BaseModel):
     """Configuration for indexing, loaded from .glma.toml + CLI flags."""
     languages: list[Language] = Field(
-        default_factory=lambda: [Language.C, Language.CPP, Language.TYPESCRIPT, Language.TSX, Language.RUST, Language.PYTHON],
+        default_factory=lambda: [Language.C, Language.PYTHON],
         description="Languages to index",
     )
     output_dir: str = Field(

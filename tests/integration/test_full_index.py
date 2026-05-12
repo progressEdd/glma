@@ -24,10 +24,10 @@ class TestFullIndex:
         assert result.total_files > 0
 
     def test_only_source_files_indexed(self, tmp_path):
-        """Only .c, .h, .py files should be indexed (4 files)."""
+        """Only .c, .py files should be indexed (3 files — .h requires cpp language)."""
         root, result = self._index_project(tmp_path)
-        assert result.total_files == 4
-        assert result.new_files == 4
+        assert result.total_files == 3
+        assert result.new_files == 3
 
     def test_git_excluded(self, tmp_path):
         root, result = self._index_project(tmp_path)
@@ -104,7 +104,7 @@ class TestFullIndex:
         md_dir = root / ".glma-index" / "markdown"
         assert md_dir.exists()
         md_files = list(md_dir.rglob("*.md"))
-        assert len(md_files) >= 4
+        assert len(md_files) >= 3
 
     def test_app_py_exports_table(self, tmp_path):
         """app.py markdown should have Key Exports with User and create_user."""
@@ -149,7 +149,7 @@ class TestFullIndex:
         root, result = self._index_project(tmp_path)
         cfg = IndexConfig(quiet=True)
         result2 = run_index(root, cfg)
-        assert result2.skipped_files == 4
+        assert result2.skipped_files == 3
         assert result2.new_files == 0
         assert result2.updated_files == 0
 
@@ -264,7 +264,8 @@ int main() {
 }
 """)
 
-        cfg = IndexConfig(quiet=True)
+        from glma.models import Language
+        cfg = IndexConfig(quiet=True, languages=[Language.C, Language.CPP])
         result = run_index(root, cfg)
         assert result.total_files == 3
 

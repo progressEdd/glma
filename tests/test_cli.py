@@ -1,3 +1,4 @@
+import pytest
 """Tests for CLI interface."""
 
 import subprocess
@@ -113,3 +114,28 @@ class TestQuerySummarizeFlags:
             # Will fail because no local model running — but shouldn't crash with traceback
             # It either succeeds (if openai is installed) or shows a clean error
             assert result.returncode != 0 or "### Cell 0" in result.stdout
+
+
+class TestLanguageValidation:
+    """Test language enum validation."""
+
+    def test_valid_cpp_language(self):
+        from glma.models import Language
+        assert Language("cpp") == Language.CPP
+
+    def test_valid_typescript_language(self):
+        from glma.models import Language
+        assert Language("typescript") == Language.TYPESCRIPT
+
+    def test_valid_tsx_language(self):
+        from glma.models import Language
+        assert Language("tsx") == Language.TSX
+
+    def test_valid_rust_language(self):
+        from glma.models import Language
+        assert Language("rust") == Language.RUST
+
+    def test_invalid_language_raises(self):
+        from glma.models import Language
+        with pytest.raises(ValueError):
+            Language("java")

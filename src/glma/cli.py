@@ -44,7 +44,7 @@ def index(
     ),
     quiet: bool = typer.Option(False, "--quiet", "-q", help="Suppress progress output."),
     config_file: Optional[Path] = typer.Option(None, "--config", help="Path to .glma.toml config file."),
-    languages: Optional[list[str]] = typer.Option(None, "--lang", help="Languages to index (c, python)."),
+    languages: Optional[list[str]] = typer.Option(None, "--lang", help="Languages to index (c, cpp, python, typescript, tsx, rust)."),
     output_dir: Optional[str] = typer.Option(None, "--output", "-o", help="Output directory for index."),
     summarize: bool = typer.Option(
         False,
