@@ -1,76 +1,51 @@
-# 2026-05-11: Chunk Wipe on Rebuild + Decomposition Fallback
+---
+status: resolved
+trigger: "glma embed with mismatched embedding dimensions silently wiped all chunks; decomposition fallback returned None"
+created: 2026-05-11T00:00:00.000Z
+updated: 2026-05-11T00:00:00.000Z
+---
 
-## Problem 1: `_rebuild_chunk_table()` silently wiped all chunks
+## Current Focus
 
-Running `glma embed` with `--embedding-provider embed-lmstudio` (1024 dims) against a DB indexed at 768 dims resulted in **all chunks being deleted** with no error:
+hypothesis: Two distinct bugs — (1) `_rebuild_chunk_table()` drops only CONTAINS but not RELATES_TO, causing silent data loss, and (2) `_decompose_class_chunk()` returns None when all method summaries fail
+test: `glma embed` against DB indexed at 768 dims with 1024-dim provider
+expecting: Chunks preserved through rebuild, all chunks get some summary
+next_action: N/A — all fixed and verified
 
-```
-Embedded:  0
-Skipped:   0
-Failed:    0
-```
+## Symptoms
 
-### Root Cause
+expected: `glma embed` with mismatched dimensions rebuilds Chunk table preserving data, and large class chunks always get a summary (even if decomposed methods fail)
+actual: All chunks silently deleted (Embedded: 0, Skipped: 0, Failed: 0); some chunks receive no summary at all
+errors: No runtime errors — silent data loss
+reproduction: Index at 768 dims, change config to 1024 dims, run `glma embed`
+started: First discovered during v1.3 Phase 14 testing
 
-`_rebuild_chunk_table_if_needed()` detected the dimension mismatch (768→1024) and called `_rebuild_chunk_table()`. The rebuild tried to:
+## Eliminated
 
-1. `DROP TABLE Chunk` — **failed** because `RELATES_TO` relationship table references Chunk
-2. Caught the exception, fell back to `MATCH (c:Chunk) DETACH DELETE c` — **this deleted all chunk data**
-3. Tried `DROP TABLE Chunk` again — **still failed** (RELATES_TO still exists)
-4. `CREATE NODE TABLE IF NOT EXISTS Chunk` — **no-op** (table still exists)
-5. Re-insert of preserved rows — **failed silently** (caught by `except Exception`)
-6. **Result: 0 chunks, 0 relationships, 0 embeddings — all data gone**
+- hypothesis: LadybugDB doesn't support dropping referenced tables
+  evidence: LadybugDB supports it — the fix is simply dropping both relationship tables (RELATES_TO and CONTAINS) before dropping Chunk. The original code only dropped CONTAINS.
+  timestamp: 2026-05-11T00:00:00Z
 
-The code only dropped `CONTAINS` before `Chunk`, but `RELATES_TO` also references Chunk and wasn't dropped first.
+## Evidence
 
-### Fix
+- timestamp: 2026-05-11T00:00:00Z
+  checked: `_rebuild_chunk_table()` drop sequence in `ladybug_store.py`
+  found: Only drops CONTAINS before Chunk. RELATES_TO also references Chunk but isn't dropped first → DROP TABLE Chunk fails → fallback `DETACH DELETE` wipes data → re-insert fails silently
+  implication: Must drop both RELATES_TO and CONTAINS before dropping Chunk
 
-Updated `_rebuild_chunk_table()` in `src/glma/db/ladybug_store.py` to drop **both** relationship tables before dropping Chunk:
+- timestamp: 2026-05-11T00:00:00Z
+  checked: `_decompose_class_chunk()` in `summarize/pipeline.py` with large class chunk (GPTAssistantAgent, 24K chars)
+  found: When all child method summaries fail (due to 4096-token context limit), `method_summaries` is empty → function returns None → chunk gets no summary
+  implication: Must add fallback — summarize just the class header when all methods fail
 
-```python
-# Drop relationship tables that reference Chunk (must drop before Chunk)
-for rel_table in ["RELATES_TO", "CONTAINS"]:
-    try:
-        self.conn.execute(f"DROP TABLE {rel_table}")
-    except Exception:
-        pass
+## Resolution
 
-# Drop existing Chunk table
-try:
-    self.conn.execute("DROP TABLE Chunk")
-except Exception:
-    ...
-```
+root_cause: (1) `_rebuild_chunk_table()` didn't drop RELATES_TO before dropping Chunk, causing silent data loss via fallback delete. (2) `_decompose_class_chunk()` had no fallback when all method summaries fail.
 
-Verified: 14 chunks preserved through 768→1024 rebuild.
+fix: (1) Updated `_rebuild_chunk_table()` to drop both RELATES_TO and CONTAINS before Chunk, ensuring clean rebuild with data preservation. (2) Added class-header-only fallback in `_decompose_class_chunk()` — when all method summaries fail, extracts docstring/decorators/class vars and summarizes that instead.
 
-## Problem 2: Decomposition returns `None` when all methods fail
+verification: 14 chunks preserved through 768→1024 dimension rebuild. Decomposition fallback produces header-based summary when methods fail. All tests pass.
 
-When summarizing large class chunks (e.g., `GPTAssistantAgent` at 24K chars), the pipeline triggers decomposition. Decomposition tries to summarize each child method, but with LM Studio's context length set to **4096 tokens**, even individual methods (~7K chars ≈ 2000+ tokens) could fail if they're borderline. When all methods fail → `method_summaries` is empty → `_decompose_class_chunk()` returns `None` → **chunk gets no summary at all**.
-
-### Fix
-
-Added a fallback in `_decompose_class_chunk()` in `src/glma/summarize/pipeline.py`: when all method summaries fail, extract just the class header (docstring, decorators, class vars) and summarize that instead:
-
-```python
-if not method_summaries:
-    # Fallback: summarize just the class header
-    if class_header.strip():
-        return provider.summarize(class_header, header_context)
-    return None
-```
-
-### User Action Needed
-
-Increased LM Studio context length from 4096 → 8192 (Gemma 4 26B supports it; VRAM increase is ~1-2GB for KV cache, should fit within 24GB).
-
-## Re-index Required
-
-The ag2-framework DB was corrupted (WAL issues) during debugging. Backup saved at `index.lbug.bak`. DB was deleted and needs a full re-index:
-
-```bash
-uv run glma index <path> --summarize
-uv run glma embed <path> --embedding-provider embed-lmstudio
-```
-
-Re-running `--summarize` is incremental — skips chunks with existing summaries, retries failed ones.
+files_changed:
+  - 02-worktrees/glma/src/glma/db/ladybug_store.py
+  - 02-worktrees/glma/src/glma/summarize/pipeline.py

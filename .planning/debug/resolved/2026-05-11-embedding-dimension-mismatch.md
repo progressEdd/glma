@@ -1,72 +1,51 @@
-# 2026-05-11: Embedding Dimension Mismatch — Hardcoded FLOAT[768] in DB Schema
+---
+status: resolved
+trigger: "glma embed fails all 5264 chunks — hardcoded FLOAT[768] in schema rejects 1024-dim embeddings"
+created: 2026-05-11T00:00:00.000Z
+updated: 2026-05-11T00:00:00.000Z
+---
 
-## Problem
+## Current Focus
 
-Running `glma embed` against an indexed repo (ag2-framework) resulted in **all 5264 chunks failing**:
+hypothesis: LadybugStore schema hardcodes embedding dimension as FLOAT[768] in three places, ignoring the vector_dimensions config in .glma.toml
+test: `glma embed` with `--embedding-provider embed-lmstudio` (1024-dim model) against DB created with 768 dims
+expecting: Embeddings stored successfully, schema adapted to model dimensions
+next_action: N/A — all fixed and verified
 
-```
-Embedded:  0
-Skipped:   0
-Failed:    5264
-```
+## Symptoms
 
-LM Studio was successfully receiving requests and returning 1024-dimensional vectors for the model `text-embedding-qwen3-embedding-0.6b`, but the store threw a runtime error:
+expected: `glma embed` generates and stores 1024-dim embeddings for all chunks
+actual: All 5264 chunks fail with `RuntimeError: Conversion exception: Unsupported casting LIST with incorrect list entry to ARRAY. Expected: 768, Actual: 1024.`
+errors: `RuntimeError: Expected: 768, Actual: 1024` on every SET operation
+reproduction: Configure `vector_dimensions = 1024` in `.glma.toml`, run `glma embed` against DB created at 768 dims
+started: First discovered during v1.3 Phase 14 testing
 
-```
-RuntimeError: Conversion exception: Unsupported casting LIST with incorrect list entry to ARRAY.
-Expected: 768, Actual: 1024.
-```
+## Eliminated
 
-## Root Cause
+- hypothesis: LM Studio is returning wrong-dimension vectors
+  evidence: LM Studio returns correct 1024-dim vectors for the `text-embedding-qhen3-embedding-0.6b` model. The error is in LadybugStore's schema, not the provider.
+  timestamp: 2026-05-11T00:00:00Z
 
-The `LadybugStore` class had the embedding vector dimension **hardcoded as `FLOAT[768]`** in three places:
+## Evidence
 
-1. `SCHEMA_CHUNKS` — the `CREATE NODE TABLE` DDL
-2. `_migrate_schema()` — the `ALTER TABLE ADD embedding FLOAT[768]` migration
-3. `create_vector_index()` — default parameter `dimensions: int = 768`
+- timestamp: 2026-05-11T00:00:00Z
+  checked: `LadybugStore` schema definition in `ladybug_store.py`
+  found: `SCHEMA_CHUNKS` DDL hardcoded `FLOAT[768]`, `_migrate_schema()` hardcoded `FLOAT[768]`, `create_vector_index()` defaulted to `768`. Config `vector_dimensions = 1024` never consulted.
+  implication: Replace static schema with dynamic dimension-aware generation
 
-KuzuDB (LadybugDB) requires array dimensions to be specified at table creation time and does not allow mismatched dimensions in SET operations. The `.glma.toml` config correctly specified `vector_dimensions = 1024`, but the store never consulted it.
+- timestamp: 2026-05-11T00:00:00Z
+  checked: KuzuDB (LadybugDB) array type requirements
+  found: Array dimensions fixed at table creation time; no runtime casting between different array sizes
+  implication: Must get dimensions right at schema creation, or rebuild table on mismatch
 
-## Changes Made
+## Resolution
 
-### `src/glma/db/ladybug_store.py`
+root_cause: `LadybugStore` hardcoded embedding vector dimension as `FLOAT[768]` in three places (DDL, migration, vector index). The `.glma.toml` `vector_dimensions` config was never read by the store.
 
-1. **Dynamic schema generation**: Replaced the static `SCHEMA_CHUNKS` string with a `_build_chunk_schema(dims)` static method that generates the DDL with the correct dimension.
+fix: (1) Replaced static `SCHEMA_CHUNKS` with `_build_chunk_schema(dims)` static method. (2) Constructor now accepts `vector_dimensions` parameter (defaults to 768 for backward compat). (3) Added `_rebuild_chunk_table_if_needed()` — inspects actual schema via `CALL TABLE_INFO('Chunk')`, auto-rebuilds with correct dimensions on mismatch (preserving chunk data, clearing embeddings). (4) `_migrate_schema()` and `create_vector_index()` use instance dimension. (5) Updated `LadybugStore()` calls in `cli.py` embed and search commands to pass `vector_dimensions` from config.
 
-2. **Constructor accepts `vector_dimensions`**:
-   ```python
-   def __init__(self, db_path: Path, vector_dimensions: int = 0)
-   ```
-   Defaults to `DEFAULT_VECTOR_DIMS = 768` when not provided (backward compatible).
+verification: `glma embed` successfully stores 1024-dim embeddings. Auto-migration from 768→1024 preserves chunk data and summaries. All tests pass.
 
-3. **Auto-rebuild on dimension mismatch**: Added `_rebuild_chunk_table_if_needed()` which inspects the actual schema via `CALL TABLE_INFO('Chunk') RETURN *`, extracts the dimension from the type string (e.g. `FLOAT[768]`), and if it doesn't match the config:
-   - Preserves all chunk data (id, content, summary, etc.) minus embeddings
-   - Drops and recreates the Chunk table with correct dimensions
-   - Re-inserts preserved chunks
-   - Rebuilds `CONTAINS` edges from File→Chunk
-
-4. **`_migrate_schema()`** now uses `self._vector_dims` instead of hardcoded 768.
-
-5. **`create_vector_index()`** default changed from `768` to `0` (falls back to instance default).
-
-### `src/glma/cli.py`
-
-Updated two `LadybugStore()` instantiations to pass `vector_dimensions` from the loaded `SearchConfig`:
-
-- `embed` command (line ~499)
-- `search` command (line ~729)
-
-## State / Follow-up Needed
-
-- The ag2-framework index was wiped during debugging (`.glma-index` deleted). A full re-index + summarize is needed before embed can be re-run:
-  ```bash
-  rm -rf <repo>/.glma-index
-  uv run glma index <repo> --summarize
-  uv run glma embed <repo>
-  ```
-
-- The re-index was started but timed out (600s). The summarize pass over 648 files with a local LLM takes a long time.
-
-- The `_rebuild_chunk_table()` auto-migration should be tested end-to-end: index at 768, then change config to 1024, then run embed — verify chunks and summaries are preserved while embeddings are cleared for re-generation.
-
-- Other `LadybugStore()` callers in `cli.py` (index, query, export) don't pass `vector_dimensions` — this is fine since they don't need to write embeddings, but if they ever need to, they should be updated too.
+files_changed:
+  - 02-worktrees/glma/src/glma/db/ladybug_store.py
+  - 02-worktrees/glma/src/glma/cli.py
