@@ -1,7 +1,11 @@
 ---
 created: 2026-04-10T00:00:00Z
+resolved: 2026-05-12
+resolved_by: v1.2 Phase 10-12 (standalone presets), v1.3 Phase 13-15 (embedding presets)
 title: Pi/agent integration for code summarization
 area: api
+status: partially done
+remaining: pi extension (glma_summarize tool using pi's model registry) not yet implemented
 files:
   - 02-worktrees/glma/src/glma/export.py:68
   - 02-worktrees/glma/src/glma/cli.py:276

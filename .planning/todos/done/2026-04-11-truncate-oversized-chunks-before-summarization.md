@@ -2,7 +2,9 @@
 created: 2026-04-11T00:00:00Z
 title: Truncate oversized chunks before sending to summarization provider
 area: api
-status: open
+status: done
+resolved: 2026-05-12
+resolved_by: v1.2 Phase 10-12
 files:
   - src/glma/summarize/pipeline.py
   - src/glma/summarize/providers.py

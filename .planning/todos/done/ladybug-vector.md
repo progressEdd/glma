@@ -1,3 +1,11 @@
+---
+created: 2026-05-11T00:00:00Z
+resolved: 2026-05-12
+resolved_by: v1.3 Phases 14-15 (vector storage, hybrid search)
+title: Ladybug vector extension reference (research/consumed)
+status: done
+---
+
 If you've ever tried to bolt a dedicated vector database onto an existing graph database, you know the pain: two systems to manage, data to sync, query results to stitch together across network boundaries. LadybugDB takes a different approach. It ships a native **vector** extension that gives you disk-based approximate nearest-neighbor (ANN) search right inside the same engine where your graph lives. You install one extension, store embeddings as regular node properties, build an index, and query everything --- vectors *and* graph structure --- in the same Cypher statement.
 
 In this article we'll go deep. We'll start with the theory behind the HNSW index algorithm that powers the extension, walk through how each tuning parameter shapes its behavior, and then get practical: creating indexes, querying them, combining vector search with graph traversals, pre-filtering, post-filtering, projected graphs with arbitrary Cypher, and cocmplex multi-step queries. Let's get into it.

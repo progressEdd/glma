@@ -2,6 +2,9 @@
 created: 2026-04-13T20:30:00Z
 title: Add markdown key-value export format as default with multi-format support
 area: api
+status: done
+resolved: 2026-05-12
+resolved_by: v1.2 Phase 10-12
 files:
   - src/glma/export.py
   - src/glma/cli.py
