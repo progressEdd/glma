@@ -3,7 +3,7 @@ gsd_state_version: 1.0
 milestone: v1.4
 milestone_name: milestone
 status: Milestone complete
-last_updated: "2026-05-12T19:14:15.142Z"
+last_updated: "2026-05-12T19:16:20.286Z"
 progress:
   total_phases: 18
   completed_phases: 18
@@ -20,9 +20,9 @@ progress:
 | Field | Value |
 |-------|-------|
 | **Milestone** | v1.4 — Hardening & Expansion |
-| **Phase** | 18 — Extended Language Support (Context gathered) |
-| **Status** | Context captured, ready for planning |
-| **Next Action** | Plan Phase 18 — Extended Language Support |
+| **Phase** | 18 — Extended Language Support (Complete) |
+| **Status** | All 5 plans executed, ready for verification |
+| **Next Action** | Verify Phase 18 |
 
 ## Phase Progress
 
@@ -30,7 +30,7 @@ progress:
 |-------|------|--------|-------------|
 | 16 | Pipeline Reliability | Complete | PIPE-01 through PIPE-06 |
 | 17 | Config Relocation | Complete | CONF-01 |
-| 18 | Extended Language Support | Context gathered | LANG-01 through LANG-06 |
+| 18 | Extended Language Support | Complete | LANG-01 through LANG-06 |
 | 19 | LLM Query Rewriting | Not started | REWR-01 through REWR-06 |
 | 20 | 3-Way Hybrid Search | Not started | HYBR-01 through HYBR-06 |
 
@@ -44,14 +44,20 @@ None.
 - Pipeline stages: discovered → chunked → relationships_extracted → complete
 - Signal handling: threading.Event with double-Ctrl+C force exit
 - Per-file markdown: single-loop summarization writes each file immediately
+- `.h` maps to CPP (not C) — C++ grammar is a superset
+- Default IndexConfig.languages stays [C, PYTHON] — new languages are opt-in
+- Container types recurse universally (not Python-only)
 
 ## Notes
 
 - Phase 16 executed all 6 plans across 3 waves, 393 tests passing
 - Phase 17 executed 1 plan (config relocation), 398 tests passing
+- Phase 18 executed all 5 plans across 3 waves, 459 tests passing
 - Chunk ID format change is backward-incompatible — existing databases must be re-indexed
 - Pipeline resume works: files at 'chunked' stage join Pass 2, 'relationships_extracted' join Pass 3
 - Config auto-migration: root `.glma.toml` → `.glma-index/.glma.toml` with Rich notice
+- New languages: C++, TypeScript, TSX, Rust — opt-in via --lang or .glma.toml
+- IMPLEMENTS RelType added for TypeScript interface implementation
 
 ---
 *State initialized: 2026-05-12*
