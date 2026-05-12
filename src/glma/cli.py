@@ -164,6 +164,16 @@ def index(
             console.print(f"[bold]Summarizing[/bold] chunks with {summ_cfg.provider.value} provider...")
 
         from glma.index.writer import write_markdown
+        from glma.index.progress import SummarizeProgress
+
+        # Pre-count total chunks across all files for progress bar
+        total_chunks = 0
+        for file_path in sorted(indexed_files.keys()):
+            chunks = store.get_chunks_for_file(file_path)
+            total_chunks += len(chunks)
+
+        summ_progress = SummarizeProgress(quiet=cfg.quiet, console=console)
+        summ_progress.start(total_chunks)
 
         processed_count = 0
         for file_path in sorted(indexed_files.keys()):
@@ -176,8 +186,8 @@ def index(
             if not chunks:
                 continue
 
-            # Summarize chunks
-            summarize_chunks(store, chunks, provider, max_chunk_chars=summ_cfg.max_chunk_chars)
+            # Summarize chunks with progress tracking
+            summarize_chunks(store, chunks, provider, max_chunk_chars=summ_cfg.max_chunk_chars, progress=summ_progress)
 
             # Generate file-level summary
             record = store.get_file_record(file_path)
@@ -202,8 +212,7 @@ def index(
             write_markdown(chunks, repo_path, cfg.output_dir, relationships=file_rels)
             processed_count += 1
 
-        if not cfg.quiet:
-            console.print(f"[green]✓[/green] Summarization complete: {processed_count} files processed")
+        summ_progress.finish(f"Summarization complete: {processed_count} files processed")
 
 
 def _write_output(text: str, output_path: Optional[str]) -> None:
