@@ -36,10 +36,10 @@ def _format_chunk_heading(chunk: Chunk) -> str:
     type_str = _chunk_display_type(chunk)
     suffix = ""
     if chunk.parent_id:
-        # Extract parent name from parent_id (format: path::type::name::line)
+        # Extract parent name from parent_id (format: path::name::line::hash8)
         parts = chunk.parent_id.split("::")
-        if len(parts) >= 3:
-            suffix = f", parent: {parts[2]}"
+        if len(parts) >= 2:
+            suffix = f", parent: {parts[1]}"
 
     return f"### {chunk.name} ({type_str}, L{chunk.start_line}-L{chunk.end_line}{suffix})"
 
