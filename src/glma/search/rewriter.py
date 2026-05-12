@@ -21,7 +21,7 @@ def rewrite_query(
     base_url: str,
     model: str,
     rewrite_prompt: Optional[str] = None,
-    timeout: float = 15.0,
+    timeout: float = 120.0,
     max_tokens: int = 100,
 ) -> str:
     """Rewrite a user search query using an LLM for better code search results.
