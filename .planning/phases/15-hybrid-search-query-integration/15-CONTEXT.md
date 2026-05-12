@@ -79,7 +79,7 @@ No changes to existing `glma query` command. No auto-embedding during search. No
 
 ### Database layer (query patterns)
 - `02-worktrees/glma/src/glma/db/ladybug_store.py` — `LadybugStore` class with `get_all_chunks_with_summaries()`, `get_chunks_for_file()`, embedding columns on Chunk table (`embedding FLOAT[768]`).
-- `.planning/todos/done/ladybug-vector.md` — **LadybugDB vector search documentation.** Covers HNSW index creation (`CREATE_VECTOR_INDEX`), querying (`QUERY_VECTOR_INDEX`), pre-filtering (`PROJECT_GRAPH`, `PROJECT_GRAPH_CYPHER`), post-filtering, graph traversal from results. MUST read before implementing search engine.
+- `.planning/todos/resolved/ladybug-vector.md` — **LadybugDB vector search documentation.** Covers HNSW index creation (`CREATE_VECTOR_INDEX`), querying (`QUERY_VECTOR_INDEX`), pre-filtering (`PROJECT_GRAPH`, `PROJECT_GRAPH_CYPHER`), post-filtering, graph traversal from results. MUST read before implementing search engine.
 
 ### CLI patterns (must follow)
 - `02-worktrees/glma/src/glma/cli.py` — Typer command pattern, `@app.command()`, config loading in CLI context, provider instantiation, `glma embed` command as closest reference for new `glma search` command
