@@ -213,4 +213,15 @@ def extract_chunks(filepath: Path, language: Language, repo_root: Path) -> list[
 
     chunks = _walk_chunks(root, source_bytes, relative_path, language)
 
+    # Deduplicate chunk IDs — rare case where two AST nodes resolve to
+    # the same file_path::name::start_line::hash8 (e.g., C struct parameter
+    # and function declarator on the same line with same content)
+    seen_ids: dict[str, int] = {}
+    for chunk in chunks:
+        if chunk.id in seen_ids:
+            seen_ids[chunk.id] += 1
+            chunk.id = f"{chunk.id}::{seen_ids[chunk.id]}"
+        else:
+            seen_ids[chunk.id] = 0
+
     return chunks
