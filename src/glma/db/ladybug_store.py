@@ -337,7 +337,7 @@ class LadybugStore:
         Does not delete or recreate the chunk — targeted field update only.
 
         Args:
-            chunk_id: Unique chunk identifier (format: path::type::name::line).
+            chunk_id: Unique chunk identifier (format: path::name::line::hash8).
             summary: New summary text to store.
         """
         self.conn.execute(
@@ -624,7 +624,7 @@ class LadybugStore:
         Does not delete or recreate the chunk — targeted field update only.
 
         Args:
-            chunk_id: Unique chunk identifier (format: path::type::name::line).
+            chunk_id: Unique chunk identifier (format: path::name::line::hash8).
             embedding: Float vector from the embedding provider.
             summary_hash: BLAKE2b hash of the summary text at embed time.
             vector_dimensions: Configured dimension count at embed time.
