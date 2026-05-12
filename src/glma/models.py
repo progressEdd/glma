@@ -184,6 +184,10 @@ class SearchConfig(BaseModel):
     hybrid_keyword_weight: float = Field(default=0.5, ge=0.0, le=1.0, description="Weight for keyword search in hybrid scoring")
     hybrid_vector_weight: float = Field(default=0.5, ge=0.0, le=1.0, description="Weight for vector search in hybrid scoring")
     custom_providers: dict[str, dict[str, str]] = Field(default_factory=dict, description="Custom embedding provider presets: name -> {base_url, model}")
+    rewrite_prompt: Optional[str] = Field(
+        default=None,
+        description="Custom system prompt for LLM query rewriting. Empty/unset uses built-in default.",
+    )
 
     @model_validator(mode="after")
     def _validate_hybrid_weights(self) -> "SearchConfig":
