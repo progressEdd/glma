@@ -38,12 +38,12 @@
 
 ### 3-Way Hybrid Search
 
-- [ ] **HYBR-01**: Graph relationship traversal returns candidate chunks ranked by proximity to seed
-- [ ] **HYBR-02**: Search results combine graph, keyword, and vector scores with configurable weights
-- [ ] **HYBR-03**: Scores normalized to common range before combining
-- [ ] **HYBR-04**: Graph traversal depth and fan-out are configurable
-- [ ] **HYBR-05**: `glma search --graph` enables 3-way hybrid mode
-- [ ] **HYBR-06**: Search output includes score breakdown when 3-way hybrid is active
+- [x] **HYBR-01**: Graph relationship traversal returns candidate chunks ranked by proximity to seed
+- [x] **HYBR-02**: Search results combine graph, keyword, and vector scores with configurable weights
+- [x] **HYBR-03**: Scores normalized to common range before combining
+- [x] **HYBR-04**: Graph traversal depth and fan-out are configurable
+- [x] **HYBR-05**: `glma search --graph` enables 3-way hybrid mode
+- [x] **HYBR-06**: Search output includes score breakdown when 3-way hybrid is active
 
 ## v2 Requirements
 
@@ -90,12 +90,12 @@ Which phases cover which requirements. Updated during roadmap creation.
 | LANG-05 | 18 | Pending |
 | LANG-06 | 18 | Pending |
 | CONF-01 | 17 | Pending |
-| HYBR-01 | 20 | Pending |
-| HYBR-02 | 20 | Pending |
-| HYBR-03 | 20 | Pending |
-| HYBR-04 | 20 | Pending |
-| HYBR-05 | 20 | Pending |
-| HYBR-06 | 20 | Pending |
+| HYBR-01 | 20 | Complete |
+| HYBR-02 | 20 | Complete |
+| HYBR-03 | 20 | Complete |
+| HYBR-04 | 20 | Complete |
+| HYBR-05 | 20 | Complete |
+| HYBR-06 | 20 | Complete |
 
 **Coverage:**
 - v1.4 requirements: 25 total

@@ -3,7 +3,7 @@ gsd_state_version: 1.0
 milestone: v1.4
 milestone_name: milestone
 status: Milestone complete
-last_updated: "2026-05-12T20:25:01.122Z"
+last_updated: "2026-05-12T20:27:51.562Z"
 progress:
   total_phases: 20
   completed_phases: 20
@@ -21,8 +21,8 @@ progress:
 |-------|-------|
 | **Milestone** | v1.4 — Hardening & Expansion |
 | **Phase** | 20 — 3-Way Hybrid Search |
-| **Status** | Context gathered |
-| **Next Action** | /gsd-plan-phase 20 |
+| **Status** | Complete |
+| **Next Action** | Milestone v1.4 complete |
 
 ## Phase Progress
 
@@ -32,7 +32,7 @@ progress:
 | 17 | Config Relocation | Complete | CONF-01 |
 | 18 | Extended Language Support | Complete | LANG-01 through LANG-06 |
 | 19 | LLM Query Rewriting | Complete | REWR-01 through REWR-06 |
-| 20 | 3-Way Hybrid Search | Context gathered | HYBR-01 through HYBR-06 |
+| 20 | 3-Way Hybrid Search | Complete | HYBR-01 through HYBR-06 |
 
 ## Blockers
 
@@ -60,6 +60,7 @@ None.
 - IMPLEMENTS RelType added for TypeScript interface implementation
 - Phase 19 context: code-aware query rewriting, reuses summarizer model, --raw skips rewrite, header shows original+rewritten query
 - Phase 19 executed all 3 plans across 2 waves, 481 tests passing
+- Phase 20 executed all 5 plans across 3 waves, 503 tests passing — milestone v1.4 complete
 
 ---
 *State initialized: 2026-05-12*
