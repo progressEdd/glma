@@ -1,7 +1,9 @@
 """CLI interface for glma."""
 
 import asyncio
+import signal
 import sys
+import threading
 from pathlib import Path
 from typing import Optional
 
@@ -97,12 +99,31 @@ def index(
     from glma.index.pipeline import run_index
     from glma.index.progress import IndexProgress
 
+    # Signal handling for graceful shutdown
+    shutdown_event = threading.Event()
+
+    def _handle_signal(signum, frame):
+        if shutdown_event.is_set():
+            # Second signal — force exit
+            console.print("[red]Force exit.[/red]")
+            raise typer.Exit(1)
+        shutdown_event.set()
+        console.print("[yellow]Interrupt received. Finishing current file...[/yellow]")
+
+    signal.signal(signal.SIGINT, _handle_signal)
+    signal.signal(signal.SIGTERM, _handle_signal)
+
     progress = IndexProgress(quiet=cfg.quiet, console=console)
-    result = run_index(repo_path, cfg, progress=progress)
+    result = run_index(repo_path, cfg, progress=progress, shutdown_event=shutdown_event)
 
     if result.total_files == 0:
         console.print("[yellow]No supported source files found.[/yellow]")
         raise typer.Exit(1)
+
+    # If interrupted during indexing, skip summarization
+    if shutdown_event.is_set():
+        console.print("[yellow]Indexing interrupted. Skipping summarization. Run 'glma index' to resume.[/yellow]")
+        raise typer.Exit(0)
 
     # Summarization pass (after indexing)
     if summarize:
@@ -582,7 +603,7 @@ def embed(
         console.print(f"  Dimensions: {search_cfg.vector_dimensions}")
 
     # Open database and run embedding pipeline
-    store = LadybugStore(db_path)
+    store = LadybugStore(db_path, vector_dimensions=search_cfg.vector_dimensions)
 
     # Rich progress display
     from rich.progress import Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
@@ -726,7 +747,7 @@ def search(
     from glma.search.engine import HybridSearchEngine
     from glma.search.formatter import format_search_output
 
-    store = LadybugStore(db_path)
+    store = LadybugStore(db_path, vector_dimensions=search_cfg.vector_dimensions)
     engine = HybridSearchEngine(store, provider, search_cfg)
 
     try:
