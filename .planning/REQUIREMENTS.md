@@ -7,12 +7,12 @@
 
 ### Pipeline Reliability
 
-- [ ] **PIPE-01**: Chunk IDs include content hash to prevent collisions from C macros/forward declarations
-- [ ] **PIPE-02**: File nodes track pipeline stage (discovered → chunked → relationships_extracted → complete)
-- [ ] **PIPE-03**: `glma index` resumes from first incomplete stage on re-run, skipping completed work
-- [ ] **PIPE-04**: Graceful SIGINT/SIGTERM handling — no partial file writes on interrupt
-- [ ] **PIPE-05**: Markdown regenerated per-file immediately after summarization, not batched at end
-- [ ] **PIPE-06**: Summarization pass shows Rich progress bar with per-chunk status and counts
+- [x] **PIPE-01**: Chunk IDs include content hash to prevent collisions from C macros/forward declarations
+- [x] **PIPE-02**: File nodes track pipeline stage (discovered → chunked → relationships_extracted → complete)
+- [x] **PIPE-03**: `glma index` resumes from first incomplete stage on re-run, skipping completed work
+- [x] **PIPE-04**: Graceful SIGINT/SIGTERM handling — no partial file writes on interrupt
+- [x] **PIPE-05**: Markdown regenerated per-file immediately after summarization, not batched at end
+- [x] **PIPE-06**: Summarization pass shows Rich progress bar with per-chunk status and counts
 
 ### LLM Query Rewriting
 
@@ -71,12 +71,12 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 | ----------- | ----- | ------ |
-| PIPE-01 | 16 | Pending |
-| PIPE-02 | 16 | Pending |
-| PIPE-03 | 16 | Pending |
-| PIPE-04 | 16 | Pending |
-| PIPE-05 | 16 | Pending |
-| PIPE-06 | 16 | Pending |
+| PIPE-01 | 16 | Complete |
+| PIPE-02 | 16 | Complete |
+| PIPE-03 | 16 | Complete |
+| PIPE-04 | 16 | Complete |
+| PIPE-05 | 16 | Complete |
+| PIPE-06 | 16 | Complete |
 | REWR-01 | 19 | Pending |
 | REWR-02 | 19 | Pending |
 | REWR-03 | 19 | Pending |
