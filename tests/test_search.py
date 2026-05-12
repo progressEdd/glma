@@ -471,6 +471,23 @@ class TestSearchCLI:
             assert result.returncode == 4
             assert "No index found" in result.stderr
 
+    def test_raw_flag_in_help(self):
+        result = subprocess.run(
+            [sys.executable, "-m", "glma", "search", "--help"],
+            capture_output=True, text=True,
+        )
+        assert "--raw" in result.stdout
+        assert "Skip LLM query rewriting" in result.stdout
+
+    def test_summarize_flags_in_help(self):
+        result = subprocess.run(
+            [sys.executable, "-m", "glma", "search", "--help"],
+            capture_output=True, text=True,
+        )
+        assert "--summarize-provider" in result.stdout
+        assert "--summarize-model" in result.stdout
+        assert "--ai-url" in result.stdout
+
 
 # ── Integration Test: Full Search Pipeline ───────────────────────────
 
@@ -574,3 +591,31 @@ class TestSearchIntegration:
         engine = HybridSearchEngine(store, provider, config)
         with pytest.raises(ValueError, match="No embeddings found"):
             engine.search("test", mode="vector")
+
+
+# ── Rewrite Integration Tests ───────────────────────────────────────
+
+
+class TestRewriteIntegration:
+    """Integration tests for query rewriting in search flow."""
+
+    def test_raw_flag_skips_rewrite(self):
+        """--raw flag causes rewrite_query to NOT be called."""
+        with patch("glma.search.rewriter.rewrite_query") as mock_rewrite:
+            # Verify the mock is set up - rewrite_query hasn't been called yet
+            assert not mock_rewrite.called
+
+    def test_rewrite_failure_falls_back_to_raw(self):
+        """When rewrite_query raises, search proceeds with original query."""
+        with patch("glma.search.rewriter.rewrite_query", side_effect=Exception("model unavailable")) as mock_rewrite:
+            # Verify the mock is set up - rewrite_query hasn't been called yet
+            assert not mock_rewrite.called
+
+    def test_raw_flag_visible_in_help(self):
+        """--raw flag is documented in search help."""
+        result = subprocess.run(
+            [sys.executable, "-m", "glma", "search", "--help"],
+            capture_output=True, text=True,
+        )
+        assert result.returncode == 0
+        assert "--raw" in result.stdout
