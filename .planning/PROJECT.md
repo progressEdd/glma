@@ -37,33 +37,38 @@ Agents can call a single command and get exactly the code context they need to i
 - ✓ Optional AI summaries via OpenAI-compatible local model (Phase 4)
 - ✓ 211 tests, all passing (Phase 1-4)
 
-## Current Milestone: v1.3 Hybrid Semantic Search
+## Current Milestone: v1.4 Hardening & Expansion
 
-**Goal:** Add hybrid keyword + vector search on chunk summaries so agents can find relevant code by meaning, not just exact matches.
+**Goal:** Fix reliability gaps, add LLM-powered search rewriting, extend language support, and unify graph + semantic + keyword into a 3-way hybrid.
 
 **Target features:**
-- Embedding provider protocol with presets (ollama, lmstudio, vllm, llamacpp, local)
-- `[search]` section in `.glma.toml` for embedding config, hybrid weights, similarity threshold
-- Ladybug vector index on chunk summary embeddings
-- `glma embed` standalone command for (re-)embedding
-- Hybrid search: Ladybug full-text + vector similarity with configurable weighting
-- `glma query --semantic "find authentication logic"` CLI integration
+- Pipeline resume/checkpoint (don't lose work on interrupt)
+- C duplicate chunk ID fix (support large C codebases like Linux kernel)
+- Summarization progress display (visible feedback during long runs)
+- Per-file markdown regeneration (don't batch at end)
+- LLM query rewriting mode — rephrase user input to be codebase-relevant before search
+- Extended language support — C++, TypeScript, Rust via tree-sitter grammars
+- 3-way hybrid search — graph relationships + keyword + vector
 
 **Key context:**
-- Ladybug already has native vector index support — no new DB needed
-- Chunk summaries already exist (rule-based + AI) — embedding target is ready
-- Provider presets reuse the same pattern as `[summarize]` providers
-- Local embedding models only — air-gapped philosophy maintained
-- 3 phases: embedding infrastructure → vector storage → hybrid search
+- Tree-sitter has built-in grammars for C++, TypeScript, Rust — mostly wiring, not new parsing
+- LLM rewriting uses existing summarizer model/provider infrastructure
+- 3-way hybrid builds on v1.3's keyword+vector foundation
+- C duplicate chunk IDs need chunk ID format change (add content hash or byte offset)
+- MCP server explicitly deferred to future milestone
 
-### Active (v1.3)
+### Active (v1.4)
 
-- VEC-01 through VEC-05: Vector storage and `glma embed` command
-- SRCH-01 through SRCH-06: Hybrid search and query integration
+- Pipeline reliability fixes (resume, chunk IDs, progress, per-file markdown)
+- LLM query rewriting for semantic search
+- Extended language support (C++, TypeScript, Rust)
+- 3-way hybrid search (graph + keyword + vector)
 
 ### Validated (v1.3)
 
 - ✓ EMB-01 through EMB-07: Embedding infrastructure — protocol, providers, presets, config (Phase 13)
+- ✓ VEC-01 through VEC-05: Vector storage and `glma embed` command (Phase 14)
+- ✓ SRCH-01 through SRCH-06: Hybrid search and query integration (Phase 15)
 
 ### Validated (v1.2)
 
@@ -85,10 +90,7 @@ Agents can call a single command and get exactly the code context they need to i
 
 ### Deferred
 
-- [ ] Extended language support (C++, TypeScript, Rust)
 - [ ] MCP server interface for direct agent integration
-- [ ] LLM-based query rewriting for semantic search
-- [ ] Graph relationship traversal + semantic search (3-way hybrid)
 
 ### Out of Scope
 
@@ -98,6 +100,7 @@ Agents can call a single command and get exactly the code context they need to i
 - Real-time collaboration — single-user tool, no multi-user sync
 - Cloud embedding providers — air-gapped philosophy, local models only
 - Reranking stage — YAGNI for v1.3, hybrid scoring should suffice
+- MCP server implementation — deferred to future milestone beyond v1.4
 
 ## Context
 
