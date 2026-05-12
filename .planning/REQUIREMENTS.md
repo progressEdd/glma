@@ -71,37 +71,38 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 | ----------- | ----- | ------ |
-| PIPE-01 | - | Pending |
-| PIPE-02 | - | Pending |
-| PIPE-03 | - | Pending |
-| PIPE-04 | - | Pending |
-| PIPE-05 | - | Pending |
-| PIPE-06 | - | Pending |
-| REWR-01 | - | Pending |
-| REWR-02 | - | Pending |
-| REWR-03 | - | Pending |
-| REWR-04 | - | Pending |
-| REWR-05 | - | Pending |
-| REWR-06 | - | Pending |
-| LANG-01 | - | Pending |
-| LANG-02 | - | Pending |
-| LANG-03 | - | Pending |
-| LANG-04 | - | Pending |
-| LANG-05 | - | Pending |
-| LANG-06 | - | Pending |
-| CONF-01 | - | Pending |
-| HYBR-01 | - | Pending |
-| HYBR-02 | - | Pending |
-| HYBR-03 | - | Pending |
-| HYBR-04 | - | Pending |
-| HYBR-05 | - | Pending |
-| HYBR-06 | - | Pending |
+| PIPE-01 | 16 | Pending |
+| PIPE-02 | 16 | Pending |
+| PIPE-03 | 16 | Pending |
+| PIPE-04 | 16 | Pending |
+| PIPE-05 | 16 | Pending |
+| PIPE-06 | 16 | Pending |
+| REWR-01 | 19 | Pending |
+| REWR-02 | 19 | Pending |
+| REWR-03 | 19 | Pending |
+| REWR-04 | 19 | Pending |
+| REWR-05 | 19 | Pending |
+| REWR-06 | 19 | Pending |
+| LANG-01 | 18 | Pending |
+| LANG-02 | 18 | Pending |
+| LANG-03 | 18 | Pending |
+| LANG-04 | 18 | Pending |
+| LANG-05 | 18 | Pending |
+| LANG-06 | 18 | Pending |
+| CONF-01 | 17 | Pending |
+| HYBR-01 | 20 | Pending |
+| HYBR-02 | 20 | Pending |
+| HYBR-03 | 20 | Pending |
+| HYBR-04 | 20 | Pending |
+| HYBR-05 | 20 | Pending |
+| HYBR-06 | 20 | Pending |
 
 **Coverage:**
 - v1.4 requirements: 25 total
-- Mapped to phases: 0
-- Unmapped: 25 ⚠️
+- Mapped to phases: 25
+- Unmapped: 0 ✓
+- Duplicate mappings: 0 ✓
 
 ---
 *Requirements defined: 2026-05-12*
-*Last updated: 2026-05-12 after initial definition*
+*Last updated: 2026-05-12 after roadmap creation for v1.4*
