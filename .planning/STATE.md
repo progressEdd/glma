@@ -3,7 +3,7 @@ gsd_state_version: 1.0
 milestone: v1.4
 milestone_name: milestone
 status: Milestone complete
-last_updated: "2026-05-12T18:12:17.734Z"
+last_updated: "2026-05-12T18:12:21.878Z"
 progress:
   total_phases: 17
   completed_phases: 17
@@ -20,8 +20,8 @@ progress:
 | Field | Value |
 |-------|-------|
 | **Milestone** | v1.4 — Hardening & Expansion |
-| **Phase** | 17 — Config Relocation (Complete) |
-| **Status** | Phase verified, all criteria passed |
+| **Phase** | 18 — Extended Language Support (Context gathered) |
+| **Status** | Context captured, ready for planning |
 | **Next Action** | Plan Phase 18 — Extended Language Support |
 
 ## Phase Progress
@@ -30,7 +30,7 @@ progress:
 |-------|------|--------|-------------|
 | 16 | Pipeline Reliability | Complete | PIPE-01 through PIPE-06 |
 | 17 | Config Relocation | Complete | CONF-01 |
-| 18 | Extended Language Support | Not started | LANG-01 through LANG-06 |
+| 18 | Extended Language Support | Context gathered | LANG-01 through LANG-06 |
 | 19 | LLM Query Rewriting | Not started | REWR-01 through REWR-06 |
 | 20 | 3-Way Hybrid Search | Not started | HYBR-01 through HYBR-06 |
 
