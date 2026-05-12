@@ -1,0 +1,250 @@
+"""Data models for glma indexing."""
+
+from enum import Enum
+from pathlib import Path
+from typing import Optional
+
+from pydantic import BaseModel, Field, model_validator
+
+
+class ChunkType(str, Enum):
+    """Types of code chunks extracted from source files."""
+    FUNCTION = "function"
+    CLASS = "class"
+    METHOD = "method"
+    MODULE = "module"
+
+
+class Language(str, Enum):
+    """Supported programming languages."""
+    C = "c"
+    CPP = "cpp"
+    TYPESCRIPT = "typescript"
+    TSX = "tsx"
+    RUST = "rust"
+    PYTHON = "python"
+
+
+class Chunk(BaseModel):
+    """A semantic code chunk extracted from a source file."""
+    id: str = Field(..., description="Unique identifier: {file_path}::{name}::{start_line}::{hash8}")
+    file_path: str = Field(..., description="Relative path from repo root")
+    chunk_type: ChunkType
+    name: str = Field(..., description="Name of the function, class, or method")
+    content: str = Field(..., description="Raw source code of the chunk")
+    summary: Optional[str] = Field(None, description="LLM-generated summary (Phase 3)")
+    start_line: int = Field(..., ge=1, description="1-indexed start line")
+    end_line: int = Field(..., ge=1, description="1-indexed end line")
+    content_hash: str = Field(..., description="BLAKE2b hash of the content")
+    parent_id: Optional[str] = Field(None, description="ID of parent chunk (method → class)")
+    embedding: Optional[list[float]] = Field(None, description="Embedding vector from chunk summary")
+    summary_hash: Optional[str] = Field(None, description="BLAKE2b hash of summary text at embed time")
+    vector_dimensions: Optional[int] = Field(None, description="Configured dimension count at embed time")
+    attached_comments: list[str] = Field(default_factory=list, description="Comments attached to this chunk")
+
+
+class FileRecord(BaseModel):
+    """Record of an indexed file."""
+    path: str = Field(..., description="Relative path from repo root")
+    language: Language
+    content_hash: str = Field(..., description="BLAKE2b hash of file content")
+    last_indexed: str = Field(..., description="ISO 8601 timestamp")
+    chunk_count: int = Field(default=0)
+    file_summary: Optional[str] = Field(default=None, description="LLM-generated file-level summary")
+    pipeline_stage: str = Field(default="discovered", description="Pipeline stage: discovered, chunked, relationships_extracted, complete")
+
+
+class RelType(str, Enum):
+    """Types of structural relationships between code chunks."""
+    CALLS = "calls"
+    IMPORTS = "imports"
+    INHERITS = "inherits"
+    INCLUDES = "includes"  # C-specific: #include relationships
+    IMPLEMENTS = "implements"  # TypeScript-specific: class implements interface
+
+
+class Confidence(str, Enum):
+    """Confidence level for relationship extraction."""
+    DIRECT = "DIRECT"
+    INFERRED = "INFERRED"
+
+
+class ExportFormat(str, Enum):
+    """Supported export output formats."""
+    MARKDOWN_KV = "markdown-kv"
+    MARKDOWN = "markdown"
+    JSON = "json"
+    YAML = "yaml"
+
+
+class Relationship(BaseModel):
+    """A structural relationship between two code chunks."""
+    source_id: str = Field(..., description="Chunk ID of the source")
+    target_id: str = Field(default="", description="Chunk ID of target (empty if unresolved)")
+    target_name: str = Field(..., description="Name as it appears in source code")
+    rel_type: RelType
+    confidence: Confidence
+    source_line: int = Field(..., ge=1, description="Line where relationship originates")
+
+
+class QueryConfig(BaseModel):
+    """Configuration for query output, derived from CLI flags."""
+    verbose: bool = Field(default=False, description="Include full code bodies")
+    depth: int = Field(default=1, ge=1, le=10, description="Relationship traversal depth")
+    no_relationships: bool = Field(default=False, description="Skip dependency section")
+    output_format: ExportFormat = Field(
+        default=ExportFormat.MARKDOWN,
+        description="Output format: markdown-kv, markdown, json, yaml",
+    )
+    rel_types: list[str] = Field(default_factory=list, description="Filter relationship types (empty = all)")
+    summary_only: bool = Field(default=False, description="Show only file summary, skip signatures")
+
+
+class WatchConfig(BaseModel):
+    """Configuration for file watching, loaded from .glma.toml + CLI flags."""
+    debounce_seconds: float = Field(
+        default=3.0,
+        ge=0.5,
+        le=30.0,
+        description="Batch window for collecting file change events before processing",
+    )
+    verbose: bool = Field(
+        default=False,
+        description="Log every file event (type + path)",
+    )
+
+
+class SummarizeProvider(str, Enum):
+    """Supported summarization provider backends."""
+    LOCAL = "local"
+    PI = "pi"
+
+
+PROVIDER_PRESETS: dict[str, dict[str, str]] = {
+    "local": {"base_url": "http://localhost:1234/v1", "model": "default"},
+    "pi": {"base_url": "", "model": "default"},
+    "ollama": {"base_url": "http://localhost:11434/v1", "model": "llama3"},
+    "lmstudio": {"base_url": "http://localhost:1234/v1", "model": "default"},
+    "llamacpp": {"base_url": "http://localhost:8080/v1", "model": "default"},
+    "vllm": {"base_url": "http://localhost:8000/v1", "model": "default"},
+    "aphrodite": {"base_url": "http://localhost:7860/v1", "model": "default"},
+}
+
+
+class SummarizeConfig(BaseModel):
+    """Configuration for AI summarization, loaded from .glma.toml [summarize] + CLI flags."""
+    enabled: bool = Field(
+        default=False,
+        description="Enable AI summarization during indexing",
+    )
+    provider: SummarizeProvider = Field(
+        default=SummarizeProvider.LOCAL,
+        description="Summarization provider: 'local' (OpenAI-compatible) or 'pi'",
+    )
+    model: str = Field(
+        default="default",
+        description="Model name for summarization",
+    )
+    base_url: str = Field(
+        default="http://localhost:1234/v1",
+        description="OpenAI-compatible API base URL (used by local provider)",
+    )
+    max_chunk_chars: int = Field(
+        default=3000,
+        ge=100,
+        description="Max chars per chunk before decomposition triggers. Chunks exceeding this are decomposed (class→method summaries→compose, or map-reduce for standalone chunks). Default 3000 ≈ 750 tokens.",
+    )
+    model_hint: str = Field(
+        default="",
+        description="Model hint for pi extension: 'fast', 'capable', exact model ID, or empty for pi's active model",
+    )
+    custom_providers: dict[str, dict[str, str]] = Field(
+        default_factory=dict,
+        description="Custom provider presets: name → {base_url, model}. Merged with PROVIDER_PRESETS.",
+    )
+
+
+EMBEDDING_PROVIDER_PRESETS: dict[str, dict[str, str]] = {
+    "embed-ollama": {"base_url": "http://localhost:11434/v1", "model": "qwen3-embedding"},
+    "embed-lmstudio": {"base_url": "http://localhost:1234/v1", "model": "ENOSYS/Octen-Embedding-8B-750-v1-GGUF"},
+    "embed-vllm": {"base_url": "http://localhost:8000/v1", "model": "default"},
+    "embed-llamacpp": {"base_url": "http://localhost:8080/v1", "model": "default"},
+    "embed-local": {"base_url": "http://localhost:1234/v1", "model": "default"},
+}
+
+
+class SearchConfig(BaseModel):
+    """Configuration for semantic/hybrid search, loaded from .glma.toml [search] + CLI flags."""
+    enabled: bool = Field(default=False, description="Enable semantic search")
+    embedding_provider: str = Field(default="embed-local", description="Embedding provider preset name")
+    embedding_model: str = Field(default="default", description="Model name for embeddings")
+    embedding_base_url: str = Field(default="http://localhost:1234/v1", description="OpenAI-compatible API base URL for embeddings")
+    vector_dimensions: int = Field(default=768, ge=1, description="Embedding vector dimensions (must match model output)")
+    similarity_threshold: float = Field(default=0.5, ge=0.0, le=1.0, description="Minimum similarity score for search results")
+    hybrid_keyword_weight: float = Field(default=0.5, ge=0.0, le=1.0, description="Weight for keyword search in hybrid scoring")
+    hybrid_vector_weight: float = Field(default=0.5, ge=0.0, le=1.0, description="Weight for vector search in hybrid scoring")
+    custom_providers: dict[str, dict[str, str]] = Field(default_factory=dict, description="Custom embedding provider presets: name -> {base_url, model}")
+
+    @model_validator(mode="after")
+    def _validate_hybrid_weights(self) -> "SearchConfig":
+        total = self.hybrid_keyword_weight + self.hybrid_vector_weight
+        if abs(total - 1.0) > 0.05:
+            raise ValueError(f"Hybrid weights must sum to ~1.0, got {total:.2f}")
+        return self
+
+
+class ExportConfig(BaseModel):
+    """Configuration for air-gapped export."""
+    output_path: Optional[str] = Field(
+        default=None,
+        description="Output path: directory, .tar.gz/.tgz archive, or '-' for stdout",
+    )
+    include_code: bool = Field(
+        default=False,
+        description="Include full source code in exported chunks",
+    )
+    ai_summaries: bool = Field(
+        default=False,
+        description="Generate AI-powered file summaries via local model",
+    )
+    ai_base_url: str = Field(
+        default="http://localhost:1234/v1",
+        description="OpenAI-compatible API base URL for local model",
+    )
+    ai_model: str = Field(
+        default="default",
+        description="Model name for AI summaries",
+    )
+    format: ExportFormat = Field(
+        default=ExportFormat.MARKDOWN_KV,
+        description="Export output format: markdown-kv, markdown, json, yaml",
+    )
+
+
+class IndexConfig(BaseModel):
+    """Configuration for indexing, loaded from .glma.toml + CLI flags."""
+    languages: list[Language] = Field(
+        default_factory=lambda: [Language.C, Language.PYTHON],
+        description="Languages to index",
+    )
+    output_dir: str = Field(
+        default=".glma-index",
+        description="Index output directory (relative to repo root)",
+    )
+    include: list[str] = Field(
+        default_factory=list,
+        description="Glob patterns to include (empty = all source files)",
+    )
+    exclude: list[str] = Field(
+        default_factory=lambda: [
+            ".git", ".svn", ".hg",
+            "venv", ".venv", "env",
+            "node_modules", "bower_components",
+            "__pycache__", ".mypy_cache", ".pytest_cache", ".ruff_cache",
+            "build", "dist", "egg-info",
+            ".tox", ".nox",
+            ".glma-index",
+        ],
+        description="Directory/file names to exclude",
+    )
+    quiet: bool = Field(default=False, description="Suppress progress output")
