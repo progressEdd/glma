@@ -1,166 +1,89 @@
-# Architecture Research
+## Existing Architecture (do NOT re-architect)
+- **Entry path:** `glma` CLI → `glma.index.pipeline.run_index()` → tree-sitter chunker/parser/relationship extractor → `LadybugStore` → markdown writer.
+- **Indexing passes:**
+  1. chunk + attach comments + store file/chunks + write markdown (no rels)
+  2. extract/store outgoing relationships + rewrite markdown
+  3. resolve incoming cross-file relationships + final markdown rewrite
+- **Storage:** Ladybug graph DB holds `File` nodes, `Chunk` nodes, `CONTAINS` edges, `RELATES_TO` edges, and chunk embeddings/vector index.
+- **Summaries:** `summarize_chunks()` uses the existing summarizer provider protocol; summaries persist back into Ladybug.
+- **Embeddings:** `embed_chunks()` uses embedding provider presets and stores vectors + hashes in Ladybug.
+- **Search:** `HybridSearchEngine.search()` currently merges fuzzy keyword scoring from summaries + vector similarity from Ladybug HNSW.
+- **Query output:** `glma query` reads from DB and formats layered markdown / KV / JSON / YAML; notebook queries bypass Ladybug entirely.
 
-**Domain:** CLI codebase indexer with AI summarization
-**Researched:** 2026-04-10
-**Confidence:** HIGH
-
-## System Overview
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                        CLI (typer)                               │
-│  glma index --summarize  |  glma export  |  glma query          │
-└──────────┬───────────────┬──────────────┬───────────────────────┘
-           │               │              │
-┌──────────▼───────────────▼──────────────▼───────────────────────┐
-│                    Indexing Pipeline                              │
-│  walk → detect → hash → parse → extract → attach → summarize →  │
-│  store → write markdown                                          │
-└──────────┬──────────────────────────────────────┬───────────────┘
-           │                                      │
-┌──────────▼──────────┐              ┌────────────▼───────────────┐
-│   LadybugStore      │              │   Summarization Pipeline   │
-│   (real_ladybug)    │◄─────────────│   (NEW)                    │
-│                     │              │                            │
-│  Chunk.summary ─────│── write ────►│  Provider Protocol         │
-│  (already exists)   │              │  ├─ OpenAICompatibleProvider│
-│                     │              │  └─ PiAgentProvider        │
-└──────────┬──────────┘              └────────────────────────────┘
-           │
-┌──────────▼──────────────────────────────────────────────────────┐
-│                     Output Layer                                  │
-│  writer.py (per-file md)  |  export.py (air-gapped)  |          │
-│  query/formatter.py       |  ARCHITECTURE.md (NEW)   |          │
-└─────────────────────────────────────────────────────────────────┘
-```
-
-## New Components
-
-### 1. Summarization Pipeline (`glma/index/summarizer.py` — NEW)
-
-**Purpose:** Generate AI summaries for chunks and persist to DB.
-
-**Integration points:**
-- Called from `pipeline.py` after chunk extraction, before markdown write
-- Reads chunks from DB, calls provider, writes `chunk.summary` back
-- Incremental: only summarize chunks where `summary` is NULL/empty AND content_hash changed
-
-**Interface:**
-```python
-class SummarizerProvider(Protocol):
-    def summarize(self, code: str, context: str) -> str: ...
-
-class OpenAICompatibleProvider:
-    """Works with Ollama, LM Studio, llama.cpp server, any OpenAI-compatible API."""
-    def __init__(self, base_url: str, model: str): ...
-
-class PiAgentProvider:
-    """Uses pi's API for summarization — no separate model server needed."""
-    def __init__(self, model: str): ...
-
-def summarize_chunks(
-    store: LadybugStore,
-    chunks: list[Chunk],
-    provider: SummarizerProvider,
-    batch_size: int = 5,
-) -> list[Chunk]:
-    """Summarize chunks that lack summaries. Returns updated chunks."""
-```
-
-**Data flow change:**
-- Current: `extract_chunks()` → `summary=None` → store → export generates summary on-the-fly
-- New: `extract_chunks()` → store → `summarize_chunks()` → update DB → export reads from DB
-
-**Key insight:** Summarization is a separate pass AFTER indexing, not part of chunk extraction. This keeps the pipeline modular and allows re-summarization without re-indexing.
-
-### 2. Provider Configuration (`glma/models.py` extension)
-
-**New model:**
-```python
-class SummarizeConfig(BaseModel):
-    enabled: bool = False
-    provider: str = "local"  # "local" or "pi"
-    base_url: str = "http://localhost:1234/v1"
-    model: str = "default"
-    batch_size: int = 5
-```
-
-**Config file integration:** `[summarize]` section in `.glma.toml`
-
-### 3. ARCHITECTURE.md Generator (`glma/export.py` extension)
-
-**Purpose:** Generate codebase-level architecture overview.
-
-**Data sources (all already in LadybugStore):**
-- File list with languages and chunk counts
-- Cross-file relationships (imports, calls, includes)
-- Per-file summaries (rule-based or AI)
-
-**Generated content:**
-- Project structure tree (directories, file counts)
-- Module dependency graph (who imports whom)
-- Entry points (files with no incoming imports)
-- Key interfaces (most-referenced functions/classes)
-
-**Integration:** Called from `export_index()` in export.py, generates ARCHITECTURE.md alongside INDEX.md and RELATIONSHIPS.md.
+## New Components Needed
+- **Pipeline checkpoint store**
+  - Persist per-file stage state (e.g. discovered, chunked, rels, markdown, embedded, complete).
+  - Can live in Ladybug `File` properties or a small sidecar state file under `.glma-index/`.
+- **Query rewrite service**
+  - A small LLM-backed pre-search rewrite step that rephrases user input into codebase-relevant terms.
+  - Should reuse the existing summarizer model/provider path, but as a separate prompt/operation.
+- **Language support plugins/config**
+  - Add tree-sitter grammars and parser registrations for C++, TypeScript, and Rust.
+  - Add language-specific extension and AST node mappings.
+- **Graph-aware search expansion**
+  - A graph candidate expander/scorer that uses relationship traversal as a third signal.
+  - Likely a thin layer over `LadybugStore.traverse_relationships()` and existing relationship getters.
 
 ## Modified Components
+- **`src/glma/index/pipeline.py`**
+  - Read/write checkpoint state per file.
+  - Resume from the first incomplete stage instead of redoing all passes.
+  - Keep per-file writes idempotent.
+- **`src/glma/db/ladybug_store.py`**
+  - Add checkpoint persistence helpers and any schema needed for stage state.
+  - Expose traversal/scoring helpers for search.
+- **`src/glma/models.py`**
+  - Extend `Language`, `IndexConfig`, `SearchConfig`, and any checkpoint enums/data models.
+- **`src/glma/index/detector.py` / `parser.py` / `chunks.py` / `relationships.py`**
+  - Register new grammars and language-specific node handling.
+- **`src/glma/search/engine.py`**
+  - Insert query rewrite before retrieval when enabled.
+  - Add graph signal into ranking.
+- **`src/glma/search/formatter.py` and CLI search path**
+  - Surface rewritten-query metadata if needed.
+  - Preserve existing output formats.
 
-### `pipeline.py`
-- Add summarization pass after relationship extraction (Pass 4)
-- Or: make it a separate command `glma summarize` that can run independently
-- Incremental: only process chunks where `summary IS NULL OR summary = ''`
+## Data Flow Changes
+- **Indexing today:** file → parse/chunk → rels → store → markdown.
+- **With checkpoints:** file moves through persisted stages; interrupted runs restart at the first missing stage.
+- **With query rewriting:** user query → rewrite prompt/model → rewritten query → keyword/vector/graph retrieval.
+- **With extended languages:** detector selects C++/TS/Rust grammars before parse/chunk/rel extraction.
+- **With 3-way search:** seed candidates from keyword + vector, then expand/boost via graph neighbors and traverse depth.
 
-### `ladybug_store.py`
-- Add `update_chunk_summary(chunk_id: str, summary: str)` method
-- Currently `upsert_chunks()` deletes and re-creates — summary would be lost on re-index
-- Need either: (a) preserve summary on re-index via content_hash check, or (b) separate update method
+## Integration Points
+- **CLI**
+  - `glma index`: checkpoint/resume flags and progress behavior.
+  - `glma search`: rewrite mode flag; graph-depth/weight options if exposed.
+  - `glma embed`: should remain compatible with resumed indexes.
+- **Pipeline**
+  - Pass 1/2/3 boundaries are the natural checkpoint boundaries.
+  - Markdown rewrites should stay per-file, not batch-at-end.
+- **LadybugStore**
+  - Source of truth for file/chunk state, relationships, embeddings, and traversal.
+- **Summarizer provider protocol**
+  - Reuse for rewrite prompts rather than adding a second LLM stack.
+- **Tree-sitter wiring**
+  - New grammars plug into `parser.py` and `detector.py` with minimal churn.
 
-### `writer.py`
-- Replace placeholder line 274 with actual summary from chunk.summary or rule-based fallback
-- Already has access to chunks with summaries
+## Suggested Build Order
+1. **Checkpoint state + resume**
+   - Foundation for safe reruns and interrupted indexing.
+2. **Chunk ID stabilization**
+   - Required before reliable resume/relationship reattachment in large C-like codebases.
+3. **Extended language wiring**
+   - Add grammars, detection, chunk extraction, and relationship mappings.
+4. **Query rewriting**
+   - Add opt-in rewrite step using existing summarizer infrastructure.
+5. **Graph-aware hybrid search**
+   - Extend search scoring once traversal and language coverage are stable.
+6. **End-to-end validation**
+   - Reindex + resume + rewrite + 3-way search on a representative repo.
 
-### `export.py`
-- `generate_ai_summary()` should READ from DB first (chunk.summary), only call LLM if empty
-- `include_code` default changes to `False` in ExportConfig
-- Add `_generate_architecture_md()` function
-
-### `models.py`
-- Add `SummarizeConfig` model
-- Update `ExportConfig.include_code` default to `False`
-- Remove "Phase 3" from chunk.summary description
-
-## Build Order
-
-1. **Bug fixes first** (no new components, low risk):
-   - ExportConfig.include_code default → False
-   - Replace writer.py placeholder
-   - Fix notebook truncation
-
-2. **Summarization infrastructure** (new component):
-   - Add `update_chunk_summary()` to LadybugStore
-   - Create `summarizer.py` with provider protocol
-   - Add `SummarizeConfig` to models.py
-
-3. **CLI integration** (wire it up):
-   - Add `--summarize` flags to `glma index`
-   - Add `glma summarize` standalone command
-   - Config file support
-
-4. **Provider implementations**:
-   - OpenAICompatibleProvider (refactor from existing export.py code)
-   - PiAgentProvider (new)
-
-5. **ARCHITECTURE.md** (uses summaries from DB):
-   - Generate from existing relationship data + summaries
-   - Add to export output
-
-## Integration Considerations
-
-- **Summary preservation on re-index:** When `upsert_chunks()` deletes and re-creates chunks, summaries are lost. Options: (a) read old summaries before upsert and re-attach to matching chunks by content_hash, or (b) only clear summary if content_hash changed. Recommend option (b).
-- **Batch sizing:** Local models have limited concurrent request capacity. Default batch_size=5 with sequential processing is safe.
-- **Summary staleness:** If code changes, summary becomes stale. Use content_hash to detect — if hash matches, keep existing summary.
-
----
-*Architecture research for: per-chunk AI summarization with pluggable providers*
-*Researched: 2026-04-10*
+## Risk Areas
+- **Checkpoint correctness:** partial writes can create mismatched File/Chunk/relationship state if stage boundaries are not atomic.
+- **Chunk ID stability:** checkpoints, embeddings, and relationships depend on durable IDs; collisions or ID format changes can break resume.
+- **LLM rewrite drift:** rewrites must preserve intent and avoid inventing terms that hurt recall.
+- **Grammar nuance:** C++/TypeScript/Rust parsing is mostly wiring, but relationship extraction and comment attachment can still be language-specific.
+- **Graph search explosion:** traversal can over-collect results unless depth, fan-out, and score decay are constrained.
+- **Reindex compatibility:** new language support and checkpoint metadata must not invalidate existing Ladybug stores unexpectedly.
+- **UX regressions:** new flags should not change current `glma query` behavior unless explicitly enabled.

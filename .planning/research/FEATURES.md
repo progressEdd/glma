@@ -1,55 +1,68 @@
-# Feature Research
+## Feature Categories
 
-**Domain:** CLI codebase indexer with AI summarization
-**Researched:** 2026-04-10
-**Confidence:** HIGH
+### Pipeline Reliability
+- **Purpose:** make `glma index`/`glma embed` restartable and interruption-safe.
+- **Expected behavior:** each file advances through persisted stages (e.g. discovered → chunked → relationships → markdown → embeddings → complete); reruns skip completed work and resume from the first incomplete stage.
+- **Typical mechanics:** checkpoint state in Ladybug or `.glma-index/`; idempotent writes; atomic per-file commits; graceful shutdown on SIGINT/SIGTERM; retry failed units on rerun.
+- **Scope for this milestone:** resume/checkpoint, C chunk ID collision fix, per-file markdown regeneration, visible progress.
 
-## Feature Landscape
+### LLM Query Rewriting
+- **Purpose:** improve search recall by rewriting user intent into codebase-language terms before retrieval.
+- **Expected behavior:** keep the original query for logs/debug; send a rewrite prompt to the existing LLM provider; use rewritten text as the actual search input.
+- **Typical rewrite rules:** expand vague terms, normalize synonyms, add likely code tokens (function/class/module names, acronyms, file concepts), keep meaning intact, avoid inventing facts.
+- **Good behavior:** concise rewrite, no answer generation, no citations, no multi-step reasoning output, deterministic-ish prompt contract.
 
-### Table Stakes (Users Expect These)
+### Extended Language Support
+- **Purpose:** add tree-sitter coverage for C++, TypeScript, and Rust without changing the indexing architecture.
+- **Expected behavior:** detect language from file extension, select the proper grammar, chunk the file, extract language-appropriate relationships, and attach comments/docstrings where feasible.
+- **Typical mechanics:** add grammars + parser registration + node-type maps; reuse existing chunk/storage/export/query pipeline; tune comment attachment per language syntax.
+- **Important note:** this is mostly wiring and mapping, not a new parsing engine.
 
-| Feature | Why Expected | Complexity | Notes |
-| ------- | ------------ | ---------- | ----- |
-| Per-chunk summaries | File-level summaries exist but are too coarse; agents need function/method-level understanding to answer "what does this function do?" | Medium | chunk.summary field exists in DB, just needs population |
-| Summaries persist across runs | If summaries are generated once, they should survive re-export without re-calling the LLM | Low | Ladybug DB already has summary field, just need write-through |
-| Summaries flow to all outputs | Once generated, summaries should appear in export markdown, query output, and writer markdown | Low | All output paths already read chunk.summary from DB |
-| Configurable model | Users have different local models (Ollama, LM Studio, llama.cpp); shouldn't be hardcoded to one | Low | OpenAI-compatible API already works with all of these |
-| Summaries-only export | Agents consuming markdown don't need full source code by default | Trivial | Just flip include_code default to False |
+### 3-Way Hybrid Search
+- **Purpose:** combine graph evidence with keyword and vector retrieval.
+- **Expected behavior:** search ranks chunks using a combined score from:
+  1. fuzzy keyword similarity on summaries,
+  2. vector similarity on embeddings,
+  3. graph proximity / relationship evidence from Ladybug traversals.
+- **Typical mechanics:** retrieve candidates from vector + keyword + graph paths, normalize each score to a common range, then combine with configurable weights and threshold filtering.
+- **Graph signal examples:** direct calls/imports/inheritance/include links, hops from a seed chunk, depth-decayed relationship strength.
 
-### Differentiators
+## Table Stakes (must have)
+- Persisted checkpoint/stage state per file.
+- Safe rerun after interrupt without duplicating work.
+- Query rewrite step that preserves original query.
+- Support for C++, TypeScript, Rust grammars.
+- 3 signals in search: graph + keyword + vector.
+- Score normalization and thresholding.
+- No change to existing `glma query` semantics unless explicitly invoked.
 
-| Feature | Why It Matters | Complexity | Notes |
-| ------- | -------------- | ---------- | ----- |
-| Pluggable provider architecture | pi agent integration means agents can summarize code they index — no separate model server needed | Medium | Protocol/ABC pattern, OpenAI-compatible + pi as two backends |
-| ARCHITECTURE.md generation | Codebase overview file gives agents instant high-level understanding without reading every file | Medium | Derived from existing relationship data + file-level summaries |
-| Incremental summarization | Only summarize new/changed chunks on re-index, not entire codebase every time | Medium | Leverage existing content_hash comparison in pipeline |
-| Batch summarization | Rate-limited batched calls to avoid overwhelming local models | Low | Simple chunk batching with configurable concurrency |
+## Differentiators (nice to have)
+- Rewrite prompt tuned for code search intents (e.g. "where is auth wired up?").
+- Depth-aware graph decay instead of binary graph hits.
+- Rebuild/revalidate indexes automatically after embeddings change.
+- Per-language relationship refinements (TS imports, Rust modules, C++ namespaces/templates).
+- Human-readable checkpoint summaries and progress checkpoints.
+- Fallback modes for keyword-only or vector-only search when one signal is unavailable.
 
-### Anti-Features (Do NOT Build)
+## Anti-features (explicitly exclude)
+- No new orchestration framework (Prefect/Dagster/Celery/Temporal).
+- No new database/search system (SQLite/Postgres/Elastic/Neo4j/FAISS/LanceDB).
+- No remote/cloud rewrite service; reuse existing local/OpenAI-compatible provider path.
+- No reranker stage for this milestone.
+- No language-server/compiler dependency for parsing.
+- No auto-embedding during search.
+- No MCP server in this milestone.
 
-| Feature | Why Not |
-| ------- | ------- |
-| Embedding storage | Future milestone (semantic search); Ladybug has vector indices but don't populate yet |
-| Query rewriting | Depends on embeddings, future milestone |
-| Custom prompt templates | YAGNI for v1.1 — hardcoded system prompt is fine |
-| Streaming summaries | Summaries are generated offline during indexing, not real-time |
-| Summary quality scoring | Overkill; user can see summaries and re-index if bad |
+## Complexity Assessment
+- **Pipeline reliability:** medium-high. Hard part is partial-failure safety and making every stage idempotent.
+- **LLM query rewriting:** medium. Mostly prompt + wiring, but needs guardrails so rewrites stay faithful.
+- **Extended language support:** medium. Grammar wiring is easy; accurate node/relationship mappings are the work.
+- **3-way hybrid search:** high. Candidate fusion, score normalization, graph traversal semantics, and result ranking all interact.
 
-### Bug Fixes (Table Stakes)
-
-| Bug | Impact | Complexity | Notes |
-| --- | ------ | ---------- | ----- |
-| Notebook cell source truncation | List comprehensions stripped from cells, losing code | Medium | Tree-sitter or regex truncation issue in notebook.py |
-| Stale Phase 3 placeholder | Writer output shows "not yet generated" for file summaries | Trivial | Replace with actual rule-based or AI summary |
-| include_code defaults True | Export includes full source by default, bloating output | Trivial | Flip ExportConfig default |
-
-## Feature Categories for v1.1
-
-1. **Bug Fixes** — Include code default, notebook truncation, stale placeholder
-2. **Summarization Pipeline** — Per-chunk AI summaries with persistence
-3. **Provider Architecture** — Pluggable model providers (local + pi)
-4. **Export Enhancement** — ARCHITECTURE.md generation
-
----
-*Feature research for: per-chunk AI summarization with pluggable providers*
-*Researched: 2026-04-10*
+## Dependencies on Existing Features
+- **Existing summary field + embedding pipeline:** query rewriting and hybrid search both depend on chunk summaries and embeddings already being present.
+- **Existing embedding/provider abstraction:** reuse the current summarizer/LLM provider stack for rewrite mode.
+- **Existing Ladybug graph schema:** graph search depends on stored chunks and relationships.
+- **Existing keyword+vector search:** 3-way hybrid extends the current search foundation.
+- **Existing tree-sitter C/Python pipeline:** extended language support should follow the same chunk/extract/store conventions.
+- **Existing CLI patterns:** `glma index`, `glma query`, `glma embed`, and config overrides should remain the integration model.

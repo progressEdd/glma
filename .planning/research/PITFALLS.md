@@ -1,116 +1,71 @@
-# Pitfalls Research
+# glma v1.4 Pitfalls
 
-**Domain:** Adding AI summarization to an existing codebase indexer
-**Researched:** 2026-04-10
-**Confidence:** HIGH
+## Pipeline Reliability Pitfalls
+- **Partial writes:** interrupting mid-file can leave chunks written but file stage/hash not updated.
+- **Skipped recovery:** hash-only skipping can permanently bypass Pass 2/3 for files that were chunked before the crash.
+- **Checkpoint drift:** in-memory progress and persisted DB state can disagree after restart.
+- **Duplicate IDs:** current C chunk IDs collide on macros/forward decls; a checkpoint system that keys off unstable IDs will fail too.
+- **Non-idempotent reruns:** repeated upserts, markdown regeneration, or relationship writes can duplicate edges unless writes are deduped.
+- **Signal timing:** SIGINT/SIGTERM during DB commits can corrupt the notion of “completed stage” even if the DB transaction itself succeeds.
+- **Embedding retry gaps:** failed chunks need explicit retry markers; otherwise resume logic can skip them forever.
 
-## Critical Pitfalls
+## LLM Query Rewriting Pitfalls
+- **Semantic drift:** rewrites can change intent or bias toward the model’s guesses instead of the user’s wording.
+- **Hallucinated tokens:** model may invent file names, symbols, or subsystem names that hurt retrieval.
+- **Over-expansion:** too many synonyms/keywords can dilute precision and pull noisy results.
+- **Mode confusion:** rewrite output must stay as a query, not an answer, explanation, or step-by-step plan.
+- **Provider variance:** different local/OpenAI-compatible models may rewrite inconsistently.
+- **Prompt injection:** user queries may contain instructions that try to override the rewrite prompt.
+- **Latency/cost:** every query may become two LLM calls if rewriting is not cached or gated.
+- **Auditability:** debug logs must preserve original query + rewritten query to explain retrieval failures.
 
-### Pitfall 1: Summaries Lost on Re-index
+## Extended Language Support Pitfalls
+- **Grammar mismatch:** tree-sitter grammars can parse successfully but still map to the wrong chunk/relationship node types.
+- **Comment/docstring rules differ:** C++, TS, and Rust attach comments differently than C/Python.
+- **Namespace/module complexity:** C++ namespaces, Rust modules/crates, and TS import paths need language-specific resolution.
+- **Preprocessor/macros/templates:** C++ macros and templates can create ambiguous or duplicated symbols like C already does.
+- **File extension traps:** `.h`, `.hpp`, `.hh`, `.ts`, `.tsx`, `.rs` need reliable classification, not just generic fallback.
+- **Dependency drift:** tree-sitter grammar package versions can change node names or query behavior.
+- **Performance variance:** large generated files or heavily templated C++ can blow up parse/chunk time.
 
-**What goes wrong:**
-`LadybugStore.upsert_chunks()` does `DETACH DELETE` + re-create for all chunks. When a file is re-indexed (even if just a whitespace change), all chunk summaries are destroyed.
-
-**Warning signs:**
-- Users run `glma index`, summarize, then `glma watch` triggers re-index → summaries gone
-- Incremental re-index during watch mode is the most common trigger
-
-**Prevention:**
-- Add `update_chunk_summary()` method that does targeted UPDATE instead of full delete+recreate
-- Before `upsert_chunks()` deletes, read existing summaries and re-attach to new chunks where content_hash matches
-- Phase to address: Summarization infrastructure phase (first phase that writes summaries)
-
-### Pitfall 2: Local Model Rate Limiting / Timeouts
-
-**What goes wrong:**
-Small local models (3-7B params) can only handle 1-2 concurrent requests. If you batch 50 chunks at a model running on CPU, it either OOMs or times out. The existing `generate_ai_summary()` has a 10-second timeout — too short for larger code chunks on slow hardware.
-
-**Warning signs:**
-- Timeout exceptions on first real codebase test (>100 files)
-- Model server crashes mid-summarization
-- Half-summarized codebase with no resume capability
-
-**Prevention:**
-- Default to sequential processing (batch_size=1), not parallel
-- Increase timeout to 30s+ for per-chunk summarization
-- Resume capability: only summarize chunks where summary IS NULL
-- Log failures per-chunk, don't abort entire run
-- Phase to address: CLI integration phase
-
-### Pitfall 3: Summary Token Limits
-
-**What goes wrong:**
-Sending a 500-line function as context to a small model produces truncated or garbage summaries. The existing `generate_ai_summary()` sends `chunk.content` but truncates at 20 chunks — it doesn't truncate individual chunk size.
-
-**Warning signs:**
-- Garbage summaries for large functions/classes
-- Token limit errors from local models
-- Inconsistent summary quality (short functions fine, large classes terrible)
-
-**Prevention:**
-- Truncate individual chunk content to ~2000 chars before sending to LLM
-- For very large chunks, send signature + first N lines only
-- Keep the prompt focused: "What does this function do?" not "Summarize everything"
-- Phase to address: Summarization infrastructure phase
-
-### Pitfall 4: Pi Provider Assumption
-
-**What goes wrong:**
-Building PiAgentProvider before understanding pi's API surface. If pi's agent API doesn't expose a simple "summarize this text" endpoint, the provider needs a different approach (e.g., calling pi as a subprocess, or using pi's SDK).
-
-**Warning signs:**
-- Pi provider is stubbed out with TODO comments
-- HTTP 401/403 errors because pi requires auth
-- Provider works in dev but breaks in production pi environment
-
-**Prevention:**
-- Research pi's actual API/SDK before implementing PiAgentProvider
-- Keep provider protocol simple so pi backend can be any shape
-- Fallback: if pi provider fails, gracefully degrade to rule-based summaries
-- Phase to address: Provider implementations phase
-
-### Pitfall 5: Notebook Truncation Regression
-
-**What goes wrong:**
-The notebook cell source truncation bug affects list comprehensions — they get stripped. Fixing this requires understanding the exact nbformat parsing code. A naive fix (e.g., stripping by regex) could break other cell types or introduce new truncation for dict comprehensions, generator expressions, etc.
-
-**Warning signs:**
-- Fix works for `[x for x in y]` but breaks `{k: v for k, v in d.items()}`
-- Markdown cells lose formatting
-- Cell outputs disappear
-
-**Prevention:**
-- Add specific test cases for: list comp, dict comp, set comp, generator expression, ternary expression
-- Check existing tests — 211 tests should catch regressions
-- Read notebook.py carefully before touching it
-- Phase to address: Bug fixes phase (first phase)
-
-### Pitfall 6: ARCHITECTURE.md Becomes Stale
-
-**What goes wrong:**
-ARCHITECTURE.md is generated during export. If the index is stale (files changed since last `glma index`), the architecture summary is wrong. Unlike per-file markdown (which has stale warnings), ARCHITECTURE.md looks authoritative.
-
-**Warning signs:**
-- Users trust ARCHITECTURE.md as "the truth" even when index is outdated
-- Architecture shows deleted files as active components
-
-**Prevention:**
-- Add timestamp header to ARCHITECTURE.md: "Generated from index at [timestamp]"
-- Add stale check: compare file count in index vs on disk, warn if mismatch
-- Phase to address: Export enhancement phase
+## 3-Way Hybrid Search Pitfalls
+- **Score incompatibility:** graph proximity, keyword scores, and vector similarity live on different scales.
+- **Bad normalization:** a weak normalization step can let one signal dominate every query.
+- **Candidate explosion:** graph traversal plus keyword/vector unions can return too many chunks.
+- **Graph noise:** inferred edges and shallow relationships can over-reward nearby but irrelevant code.
+- **Sparse signals:** some files will have no embeddings, weak text matches, or no graph edges; ranking must degrade gracefully.
+- **Duplicate candidates:** the same chunk may arrive from all three channels and needs stable deduping.
+- **Threshold coupling:** similarity thresholds that work for vector search may exclude good graph-heavy results.
+- **Query rewriting interaction:** rewritten queries may help keyword/vector but hurt graph retrieval if they remove original domain terms.
 
 ## Integration Pitfalls
+- **Checkpoint vs ID changes:** changing chunk IDs for C can invalidate stored relationships, embeddings, and resume markers.
+- **Resume vs search indexes:** resuming indexing while search data is stale can surface partial results.
+- **Language support vs hybrid search:** new languages need embeddings, summaries, and relationship extraction before they participate in 3-way search.
+- **Rewrite vs retrieval caching:** rewritten queries need separate cache keys from original queries.
+- **Markdown/export consistency:** per-file markdown regeneration must stay in sync with DB state after resume.
+- **Test matrix growth:** restart + rewrite + new languages + hybrid search creates many combinational failure modes.
+- **Backward compatibility:** old indexes need migration or reindex guidance when stage schema or chunk IDs change.
 
-### Importing openai as Hard Dependency
+## Prevention Strategies
+- Use a **versioned pipeline state machine** per file: discovered → chunked → relationships_extracted → markdown_written → embedded → complete.
+- Make every stage **idempotent** and safe to rerun.
+- Persist **checkpoint + last successful stage + schema version** in Ladybug or a sidecar state store.
+- Commit state **atomically per file**, not per batch.
+- Treat chunk IDs as **versioned and collision-resistant** (hash/offset suffix).
+- Keep query rewriting **opt-in or gated**, with original query always logged.
+- Add **rewrite guardrails**: preserve intent, cap rewrite length, forbid invented symbols.
+- Normalize search scores with **explicit calibration tests** and per-signal fallbacks.
+- Deduplicate candidates across channels before ranking.
+- Add end-to-end tests for **interrupt/restart**, **language parsing**, **rewrite fidelity**, and **hybrid ranking**.
 
-The codebase currently imports openai conditionally (`try: from openai import OpenAI`). Making it a hard dependency would break installs for users who only want rule-based summaries.
+## Which Phase Should Address Each
+| Phase | Should Cover | Main Pitfalls |
+| --- | --- | --- |
+| **Phase 16: Pipeline Reliability** | checkpointing, interrupt recovery, stage persistence, chunk ID migration | pipeline reliability, integration, backward compatibility |
+| **Phase 17: LLM Query Rewriting** | rewrite prompt, provider wiring, logging, guardrails | semantic drift, hallucination, prompt injection, latency |
+| **Phase 18: Extended Language Support** | C++, TypeScript, Rust grammars, node maps, comment rules, symbol resolution | grammar mismatch, extension traps, parser drift, macro/template edge cases |
+| **Phase 19: 3-Way Hybrid Search** | graph + keyword + vector scoring, normalization, dedupe, thresholds | score incompatibility, candidate explosion, sparse-signal fallback, graph noise |
+| **Phase 20: Integration Hardening** | cross-feature E2E tests, migrations, resume/rewrite/search compatibility | checkpoint vs ID changes, stale indexes, test matrix explosion, export consistency |
 
-**Prevention:** Keep openai as optional dependency. Add `[ai]` extra to pyproject.toml: `pip install glma[ai]`.
-
-### Config Breaking Change
-
-Adding `[summarize]` section to `.glma.toml` should be backward-compatible — old configs without it should work fine (summarization disabled by default).
-
----
-*Pitfalls research for: per-chunk AI summarization with pluggable providers*
-*Researched: 2026-04-10*
+**Rule of thumb:** fix reliability and identity first, then rewrite, then expand languages, then merge signals.
