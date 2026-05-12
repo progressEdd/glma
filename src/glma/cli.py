@@ -88,7 +88,7 @@ def index(
         cli_overrides["output_dir"] = output_dir
 
     # Load config (file + CLI overrides)
-    cfg = load_config(repo_path, cli_overrides)
+    cfg = load_config(repo_path, cli_overrides, config_file=config_file)
 
     if not cfg.quiet:
         console.print(f"[bold]glma[/bold] indexing [cyan]{repo_path}[/cyan]")
@@ -143,7 +143,7 @@ def index(
         if max_chunk_chars is not None:
             summarize_overrides["max_chunk_chars"] = max_chunk_chars
 
-        summ_cfg = load_summarize_config(repo_path, summarize_overrides)
+        summ_cfg = load_summarize_config(repo_path, summarize_overrides, config_file=config_file)
 
         # Instantiate provider
         try:
@@ -436,7 +436,7 @@ def watch(
     repo_path = path.resolve() if path else Path.cwd()
 
     # Validate repo has been indexed
-    index_config = load_config(repo_path)
+    index_config = load_config(repo_path, config_file=config_file)
     db_path = repo_path / index_config.output_dir / "db" / "index.lbug"
     if not db_path.exists():
         console.print("[red]Error: No index found. Run `glma index` first.[/red]")
@@ -449,7 +449,7 @@ def watch(
     if debounce is not None:
         watch_overrides["debounce_seconds"] = debounce
 
-    watch_config = load_watch_config(repo_path, watch_overrides)
+    watch_config = load_watch_config(repo_path, watch_overrides, config_file=config_file)
 
     # Run the async watcher
     from glma.watch import watch_and_index
@@ -496,7 +496,7 @@ def export(
     repo_path = path.resolve() if path else Path.cwd()
 
     # Validate repo has been indexed
-    index_config = load_config(repo_path)
+    index_config = load_config(repo_path, config_file=config_file)
     db_path = repo_path / index_config.output_dir / "db" / "index.lbug"
     if not db_path.exists():
         console.print("[red]Error: No index found. Run `glma index` first.[/red]")
@@ -520,7 +520,7 @@ def export(
         raise typer.Exit(4)
     export_overrides["format"] = export_format
 
-    export_config = load_export_config(repo_path, export_overrides)
+    export_config = load_export_config(repo_path, export_overrides, config_file=config_file)
 
     # Run export
     from glma.db.ladybug_store import LadybugStore

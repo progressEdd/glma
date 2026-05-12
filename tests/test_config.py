@@ -5,8 +5,16 @@ from pathlib import Path
 
 import pytest
 
-from glma.config import load_config
+from glma.config import load_config, _resolve_config_path
 from glma.models import Language
+
+
+@pytest.fixture
+def config_dir(tmp_path):
+    """Create .glma-index/ directory for config file placement."""
+    config_path = tmp_path / ".glma-index"
+    config_path.mkdir()
+    return config_path
 
 
 class TestDefaultConfig:
@@ -31,7 +39,8 @@ class TestFileConfig:
     """Test config loaded from .glma.toml."""
 
     def test_load_languages(self, tmp_path):
-        config_file = tmp_path / ".glma.toml"
+        (tmp_path / ".glma-index").mkdir(exist_ok=True)
+        config_file = tmp_path / ".glma-index" / ".glma.toml"
         config_file.write_text(
             '[index]\nlanguages = ["c"]\noutput_dir = "my-output"\n'
         )
@@ -40,7 +49,8 @@ class TestFileConfig:
         assert cfg.output_dir == "my-output"
 
     def test_load_python_only(self, tmp_path):
-        config_file = tmp_path / ".glma.toml"
+        (tmp_path / ".glma-index").mkdir(exist_ok=True)
+        config_file = tmp_path / ".glma-index" / ".glma.toml"
         config_file.write_text('[index]\nlanguages = ["python"]\n')
         cfg = load_config(tmp_path)
         assert cfg.languages == [Language.PYTHON]
@@ -51,7 +61,8 @@ class TestCliOverrides:
     """Test CLI overrides take precedence over file config."""
 
     def test_cli_overrides_file(self, tmp_path):
-        config_file = tmp_path / ".glma.toml"
+        (tmp_path / ".glma-index").mkdir(exist_ok=True)
+        config_file = tmp_path / ".glma-index" / ".glma.toml"
         config_file.write_text('[index]\noutput_dir = "from-file"\n')
         cfg = load_config(tmp_path, {"output_dir": "from-cli"})
         assert cfg.output_dir == "from-cli"
@@ -61,7 +72,8 @@ class TestCliOverrides:
         assert cfg.quiet is True
 
     def test_none_override_ignored(self, tmp_path):
-        config_file = tmp_path / ".glma.toml"
+        (tmp_path / ".glma-index").mkdir(exist_ok=True)
+        config_file = tmp_path / ".glma-index" / ".glma.toml"
         config_file.write_text('[index]\noutput_dir = "from-file"\n')
         cfg = load_config(tmp_path, {"output_dir": None})
         assert cfg.output_dir == "from-file"
@@ -71,7 +83,8 @@ class TestInvalidConfig:
     """Test invalid configuration raises errors."""
 
     def test_invalid_language(self, tmp_path):
-        config_file = tmp_path / ".glma.toml"
+        (tmp_path / ".glma-index").mkdir(exist_ok=True)
+        config_file = tmp_path / ".glma-index" / ".glma.toml"
         config_file.write_text('[index]\nlanguages = ["rust"]\n')
         with pytest.raises(Exception):
             load_config(tmp_path)
@@ -90,7 +103,8 @@ class TestSummarizeConfig:
 
     def test_load_from_file(self, tmp_path):
         from glma.config import load_summarize_config
-        config_file = tmp_path / ".glma.toml"
+        (tmp_path / ".glma-index").mkdir(exist_ok=True)
+        config_file = tmp_path / ".glma-index" / ".glma.toml"
         config_file.write_text(
             '[summarize]\nenabled = true\nprovider = "local"\nmodel = "llama3"\nbase_url = "http://ollama:11434/v1"\n'
         )
@@ -101,14 +115,16 @@ class TestSummarizeConfig:
 
     def test_cli_overrides_file(self, tmp_path):
         from glma.config import load_summarize_config
-        config_file = tmp_path / ".glma.toml"
+        (tmp_path / ".glma-index").mkdir(exist_ok=True)
+        config_file = tmp_path / ".glma-index" / ".glma.toml"
         config_file.write_text('[summarize]\nmodel = "from-file"\n')
         cfg = load_summarize_config(tmp_path, {"model": "from-cli"})
         assert cfg.model == "from-cli"
 
     def test_none_override_ignored(self, tmp_path):
         from glma.config import load_summarize_config
-        config_file = tmp_path / ".glma.toml"
+        (tmp_path / ".glma-index").mkdir(exist_ok=True)
+        config_file = tmp_path / ".glma-index" / ".glma.toml"
         config_file.write_text('[summarize]\nmodel = "from-file"\n')
         cfg = load_summarize_config(tmp_path, {"model": None})
         assert cfg.model == "from-file"
@@ -166,7 +182,8 @@ class TestProviderPresets:
     def test_custom_provider_from_toml(self, tmp_path):
         """Custom providers from [summarize.providers] override built-in presets."""
         from glma.config import load_summarize_config
-        config_file = tmp_path / ".glma.toml"
+        (tmp_path / ".glma-index").mkdir(exist_ok=True)
+        config_file = tmp_path / ".glma-index" / ".glma.toml"
         config_file.write_text(
             '[summarize.providers.ollama]\nbase_url = "http://my-server:11434/v1"\nmodel = "mistral"\n'
         )
@@ -177,7 +194,8 @@ class TestProviderPresets:
     def test_new_custom_provider(self, tmp_path):
         """Entirely new custom provider can be added via config."""
         from glma.config import load_summarize_config
-        config_file = tmp_path / ".glma.toml"
+        (tmp_path / ".glma-index").mkdir(exist_ok=True)
+        config_file = tmp_path / ".glma-index" / ".glma.toml"
         config_file.write_text(
             '[summarize.providers.myprovider]\nbase_url = "http://custom:5555/v1"\nmodel = "mymodel"\n'
         )
@@ -236,7 +254,8 @@ class TestSearchConfigFile:
 
     def test_load_from_file(self, tmp_path):
         from glma.config import load_search_config
-        config_file = tmp_path / ".glma.toml"
+        (tmp_path / ".glma-index").mkdir(exist_ok=True)
+        config_file = tmp_path / ".glma-index" / ".glma.toml"
         config_file.write_text(
             '[search]\nenabled = true\nembedding_provider = "embed-ollama"\n'
         )
@@ -247,14 +266,16 @@ class TestSearchConfigFile:
 
     def test_cli_overrides_file(self, tmp_path):
         from glma.config import load_search_config
-        config_file = tmp_path / ".glma.toml"
+        (tmp_path / ".glma-index").mkdir(exist_ok=True)
+        config_file = tmp_path / ".glma-index" / ".glma.toml"
         config_file.write_text('[search]\nembedding_model = "from-file"\n')
         cfg = load_search_config(tmp_path, {"embedding_model": "from-cli"})
         assert cfg.embedding_model == "from-cli"
 
     def test_none_override_ignored(self, tmp_path):
         from glma.config import load_search_config
-        config_file = tmp_path / ".glma.toml"
+        (tmp_path / ".glma-index").mkdir(exist_ok=True)
+        config_file = tmp_path / ".glma-index" / ".glma.toml"
         config_file.write_text('[search]\nembedding_model = "from-file"\n')
         cfg = load_search_config(tmp_path, {"embedding_model": None})
         assert cfg.embedding_model == "from-file"
@@ -292,7 +313,8 @@ class TestSearchProviderPresets:
     def test_custom_provider_from_toml(self, tmp_path):
         """Custom providers from [search.providers] override built-in presets."""
         from glma.config import load_search_config
-        config_file = tmp_path / ".glma.toml"
+        (tmp_path / ".glma-index").mkdir(exist_ok=True)
+        config_file = tmp_path / ".glma-index" / ".glma.toml"
         config_file.write_text(
             '[search.providers.mycustom]\nbase_url = "http://my-server:5555/v1"\nmodel = "mymodel"\n'
         )
@@ -306,3 +328,47 @@ class TestSearchProviderPresets:
         cfg = load_search_config(tmp_path, cli_overrides={"embedding_provider": "embed-local"})
         assert cfg.embedding_base_url == "http://localhost:1234/v1"
         assert cfg.embedding_model == "default"
+
+
+class TestConfigMigration:
+    """Test auto-migration from root .glma.toml to .glma-index/.glma.toml."""
+
+    def test_auto_migrate_root_config(self, tmp_path):
+        """Root .glma.toml is auto-moved to .glma-index/.glma.toml."""
+        (tmp_path / ".glma.toml").write_text('[index]\noutput_dir = "custom-out"\n')
+        cfg = load_config(tmp_path)
+        assert cfg.output_dir == "custom-out"
+        # File should now be in new location
+        assert (tmp_path / ".glma-index" / ".glma.toml").exists()
+        # Old file should be gone
+        assert not (tmp_path / ".glma.toml").exists()
+
+    def test_new_location_takes_priority(self, tmp_path):
+        """If both locations exist, new location wins."""
+        (tmp_path / ".glma-index").mkdir()
+        (tmp_path / ".glma.toml").write_text('[index]\noutput_dir = "old-location"\n')
+        (tmp_path / ".glma-index" / ".glma.toml").write_text('[index]\noutput_dir = "new-location"\n')
+        cfg = load_config(tmp_path)
+        assert cfg.output_dir == "new-location"
+        # Old file should still exist (not deleted in dual-location case)
+        assert (tmp_path / ".glma.toml").exists()
+
+    def test_no_config_no_error(self, tmp_path):
+        """No config anywhere returns defaults without error."""
+        cfg = load_config(tmp_path)
+        assert cfg.output_dir == ".glma-index"
+
+    def test_explicit_config_skips_migration(self, tmp_path):
+        """--config flag uses exact path, no migration logic."""
+        custom = tmp_path / "custom-config.toml"
+        custom.write_text('[index]\noutput_dir = "explicit"\n')
+        result = _resolve_config_path(tmp_path, explicit_config=custom)
+        assert result == custom
+
+    def test_migration_creates_index_dir(self, tmp_path):
+        """Migration creates .glma-index/ if it doesn't exist."""
+        assert not (tmp_path / ".glma-index").exists()
+        (tmp_path / ".glma.toml").write_text('[index]\noutput_dir = "migrated"\n')
+        cfg = load_config(tmp_path)
+        assert cfg.output_dir == "migrated"
+        assert (tmp_path / ".glma-index").is_dir()

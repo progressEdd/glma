@@ -1,25 +1,57 @@
-"""Configuration loading from .glma.toml and CLI flags."""
+"""Configuration loading from .glma-index/.glma.toml and CLI flags."""
 
+import shutil
 import tomllib
 from pathlib import Path
 from typing import Optional
 
+from rich.console import Console
+
 from glma.models import IndexConfig, Language, WatchConfig, ExportConfig, SummarizeConfig, PROVIDER_PRESETS, SearchConfig, EMBEDDING_PROVIDER_PRESETS
 
+_console = Console(stderr=True)
 
-def load_config(repo_root: Path, cli_overrides: Optional[dict] = None) -> IndexConfig:
-    """Load configuration from .glma.toml in repo root, with CLI flag overrides.
 
-    Priority: CLI flags > .glma.toml > defaults (from IndexConfig).
+def _resolve_config_path(repo_root: Path, explicit_config: Optional[Path] = None) -> Path:
+    """Resolve config file path with auto-migration from legacy root location.
+
+    Priority:
+      1. explicit_config (from --config flag) — used as-is, no migration
+      2. .glma-index/.glma.toml (new location) — used if exists
+      3. .glma.toml (root, legacy) — auto-moved to new location with notice
+      4. Neither — return new location path (used if config is later created)
+    """
+    if explicit_config:
+        return explicit_config
+
+    new_path = repo_root / ".glma-index" / ".glma.toml"
+    if new_path.exists():
+        return new_path
+
+    old_path = repo_root / ".glma.toml"
+    if old_path.exists():
+        new_path.parent.mkdir(parents=True, exist_ok=True)
+        shutil.move(str(old_path), str(new_path))
+        _console.print("[yellow][moved][/yellow] .glma.toml → .glma-index/.glma.toml")
+        return new_path
+
+    return new_path
+
+
+def load_config(repo_root: Path, cli_overrides: Optional[dict] = None, config_file: Optional[Path] = None) -> IndexConfig:
+    """Load configuration from .glma-index/.glma.toml (with auto-migration from root .glma.toml), with CLI flag overrides.
+
+    Priority: CLI flags > .glma-index/.glma.toml > defaults (from IndexConfig).
 
     Args:
         repo_root: Path to the repository root directory.
         cli_overrides: Optional dict of CLI flag overrides.
+        config_file: Optional explicit config file path (from --config flag).
 
     Returns:
         Merged IndexConfig.
     """
-    config_path = repo_root / ".glma.toml"
+    config_path = _resolve_config_path(repo_root, config_file)
     file_config = {}
 
     if config_path.exists():
@@ -43,9 +75,9 @@ def load_config(repo_root: Path, cli_overrides: Optional[dict] = None) -> IndexC
     return IndexConfig(**merged)
 
 
-def load_watch_config(repo_root: Path, cli_overrides: Optional[dict] = None) -> WatchConfig:
-    """Load watch configuration from .glma.toml [watch] section + CLI flags."""
-    config_path = repo_root / ".glma.toml"
+def load_watch_config(repo_root: Path, cli_overrides: Optional[dict] = None, config_file: Optional[Path] = None) -> WatchConfig:
+    """Load watch configuration from .glma-index/.glma.toml [watch] section + CLI flags."""
+    config_path = _resolve_config_path(repo_root, config_file)
     file_config = {}
 
     if config_path.exists():
@@ -64,9 +96,9 @@ def load_watch_config(repo_root: Path, cli_overrides: Optional[dict] = None) -> 
     return WatchConfig(**merged)
 
 
-def load_export_config(repo_root: Path, cli_overrides: Optional[dict] = None) -> ExportConfig:
-    """Load export configuration from .glma.toml [export] section + CLI flags."""
-    config_path = repo_root / ".glma.toml"
+def load_export_config(repo_root: Path, cli_overrides: Optional[dict] = None, config_file: Optional[Path] = None) -> ExportConfig:
+    """Load export configuration from .glma-index/.glma.toml [export] section + CLI flags."""
+    config_path = _resolve_config_path(repo_root, config_file)
     file_config = {}
 
     if config_path.exists():
@@ -85,9 +117,9 @@ def load_export_config(repo_root: Path, cli_overrides: Optional[dict] = None) ->
     return ExportConfig(**merged)
 
 
-def load_summarize_config(repo_root: Path, cli_overrides: Optional[dict] = None) -> SummarizeConfig:
-    """Load summarization configuration from .glma.toml [summarize] section + CLI flags."""
-    config_path = repo_root / ".glma.toml"
+def load_summarize_config(repo_root: Path, cli_overrides: Optional[dict] = None, config_file: Optional[Path] = None) -> SummarizeConfig:
+    """Load summarization configuration from .glma-index/.glma.toml [summarize] section + CLI flags."""
+    config_path = _resolve_config_path(repo_root, config_file)
     file_config = {}
     raw = {}
 
@@ -131,9 +163,9 @@ def load_summarize_config(repo_root: Path, cli_overrides: Optional[dict] = None)
     return SummarizeConfig(**merged)
 
 
-def load_search_config(repo_root: Path, cli_overrides: Optional[dict] = None) -> SearchConfig:
-    """Load search/embedding configuration from .glma.toml [search] section + CLI flags."""
-    config_path = repo_root / ".glma.toml"
+def load_search_config(repo_root: Path, cli_overrides: Optional[dict] = None, config_file: Optional[Path] = None) -> SearchConfig:
+    """Load search/embedding configuration from .glma-index/.glma.toml [search] section + CLI flags."""
+    config_path = _resolve_config_path(repo_root, config_file)
     file_config = {}
     raw = {}
 
