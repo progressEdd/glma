@@ -60,6 +60,7 @@ class RelType(str, Enum):
     IMPORTS = "imports"
     INHERITS = "inherits"
     INCLUDES = "includes"  # C-specific: #include relationships
+    IMPLEMENTS = "implements"  # TypeScript-specific: class implements interface
 
 
 class Confidence(str, Enum):

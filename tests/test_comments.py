@@ -92,3 +92,80 @@ class TestEdgeCases:
         chunks = extract_chunks(src, Language.PYTHON, tmp_path)
         chunks = attach_comments(chunks, src, Language.PYTHON, tmp_path)
         assert chunks == []
+
+
+class TestCppComments:
+    def test_add_has_comment(self, tmp_path):
+        src = tmp_path / "sample.cpp"
+        src.write_text((FIXTURES / "sample.cpp").read_text())
+        chunks = extract_chunks(src, Language.CPP, tmp_path)
+        chunks = attach_comments(chunks, src, Language.CPP, tmp_path)
+
+        add_func = [c for c in chunks if c.name == "add"]
+        if add_func:
+            assert any("standalone function" in c.lower() for c in add_func[0].attached_comments)
+
+
+class TestTypescriptComments:
+    def test_jsdoc_attached(self, tmp_path):
+        src = tmp_path / "sample.ts"
+        src.write_text((FIXTURES / "sample.ts").read_text())
+        chunks = extract_chunks(src, Language.TYPESCRIPT, tmp_path)
+        chunks = attach_comments(chunks, src, Language.TYPESCRIPT, tmp_path)
+
+        all_comments = []
+        for c in chunks:
+            all_comments.extend(c.attached_comments)
+        assert len(chunks) > 0
+
+    def test_jsdoc_extraction(self, tmp_path):
+        src = tmp_path / "doc.ts"
+        src.write_text("""\
+/** A documented function */
+function greet(name: string): string {
+    return `Hello, ${name}`;
+}
+""")
+        chunks = extract_chunks(src, Language.TYPESCRIPT, tmp_path)
+        chunks = attach_comments(chunks, src, Language.TYPESCRIPT, tmp_path)
+
+        greet = [c for c in chunks if c.name == "greet"]
+        assert len(greet) == 1
+        assert any("documented function" in c.lower() for c in greet[0].attached_comments)
+
+
+class TestRustComments:
+    def test_outer_doc_comment(self, tmp_path):
+        src = tmp_path / "sample.rs"
+        src.write_text("""\
+/// A documented function
+fn documented() -> i32 {
+    42
+}
+
+fn other() -> i32 {
+    0
+}
+""")
+        chunks = extract_chunks(src, Language.RUST, tmp_path)
+        chunks = attach_comments(chunks, src, Language.RUST, tmp_path)
+
+        doc = [c for c in chunks if c.name == "documented"]
+        assert len(doc) == 1
+        assert any("documented function" in c.lower() for c in doc[0].attached_comments)
+
+    def test_inner_doc_comment(self, tmp_path):
+        src = tmp_path / "sample.rs"
+        src.write_text("""\
+//! Module documentation
+
+/// A function
+fn foo() {}
+""")
+        chunks = extract_chunks(src, Language.RUST, tmp_path)
+        chunks = attach_comments(chunks, src, Language.RUST, tmp_path)
+
+        all_comments = []
+        for c in chunks:
+            all_comments.extend(c.attached_comments)
+        assert any("Module documentation" in c for c in all_comments)
