@@ -1,6 +1,7 @@
 """Main indexing pipeline — orchestrates the full index workflow."""
 
 import hashlib
+import threading
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
@@ -47,6 +48,7 @@ def run_index(
     progress: Optional[IndexProgress] = None,
     changed_files: Optional[list[tuple[Path, str]]] = None,
     deleted_paths: Optional[list[str]] = None,
+    shutdown_event: Optional[threading.Event] = None,
 ) -> IndexResult:
     """Run the full indexing pipeline on a repository.
 
@@ -57,6 +59,9 @@ def run_index(
         config: Indexing configuration.
         store: Optional pre-existing LadybugStore (creates one if None).
         progress: Optional progress display.
+        changed_files: Optional list of (filepath, language) tuples for incremental updates.
+        deleted_paths: Optional list of deleted file paths to remove.
+        shutdown_event: Optional threading.Event for graceful shutdown on SIGINT/SIGTERM.
 
     Returns:
         IndexResult with counts of files processed.
@@ -84,11 +89,24 @@ def run_index(
     indexed_paths = set(indexed_files.keys())
     source_paths = {str(f.relative_to(repo_root)) for f, _ in source_files}
 
+    # Resume: get existing file stages from DB
+    file_stages: dict[str, str] = {}
+    for fp in indexed_files:
+        record = store.get_file_record(fp)
+        if record:
+            file_stages[fp] = getattr(record, 'pipeline_stage', 'complete')
+
     # Track which files actually changed (new or updated content)
     changed_relative_paths: set[str] = set()
 
-    # Phase 2: Process each file (streaming — one at a time)
+    # Phase 2 (Pass 1): Process each file (streaming — one at a time)
     for filepath, language_name in source_files:
+        # Shutdown check at start of each file
+        if shutdown_event and shutdown_event.is_set():
+            if progress:
+                progress.console.print("[yellow]Interrupted. Finishing current file...[/yellow]")
+            break
+
         language = Language(language_name)
         relative_path = str(filepath.relative_to(repo_root))
 
@@ -125,6 +143,7 @@ def run_index(
             content_hash=current_hash,
             last_indexed=datetime.now(timezone.utc).isoformat(),
             chunk_count=len(chunks),
+            pipeline_stage="discovered",
         )
         store.upsert_file(file_record)
         store.upsert_chunks(relative_path, chunks)
@@ -132,6 +151,9 @@ def run_index(
         # Write markdown output (without relationships — Pass 1)
         if chunks:
             write_markdown(chunks, repo_root, config.output_dir, relationships=[])
+
+        # Set stage to chunked after successful chunk extraction
+        store.set_pipeline_stage(relative_path, "chunked")
 
         if is_new:
             result.new_files += 1
@@ -147,12 +169,20 @@ def run_index(
     if progress:
         progress.console.print("[dim]Extracting relationships...[/dim]")
 
+    # Resume: also process files from previous runs that are at 'chunked' stage
+    resume_chunked = [fp for fp, stage in file_stages.items() if stage == "chunked"]
+    pass2_paths = changed_relative_paths | set(resume_chunked)
+
     for filepath, language_name in source_files:
+        # Shutdown check
+        if shutdown_event and shutdown_event.is_set():
+            break
+
         language = Language(language_name)
         relative_path = str(filepath.relative_to(repo_root))
 
-        # Skip files that weren't actually changed
-        if relative_path not in changed_relative_paths:
+        # Skip files that weren't changed AND aren't in resume set
+        if relative_path not in pass2_paths:
             continue
 
         # Get chunks for this file from the DB
@@ -169,8 +199,11 @@ def run_index(
         file_rels = store.get_file_relationships(relative_path)
         write_markdown(chunks, repo_root, config.output_dir, relationships=file_rels)
 
+        # Set stage to relationships_extracted after successful relationship extraction
+        store.set_pipeline_stage(relative_path, "relationships_extracted")
+
     # Pass 3: Cross-file incoming relationships — final markdown rewrite
-    # Process changed files + files that depend on them
+    # Process changed files + files that depend on them + resumed files
     dependent_paths: set[str] = set()
     for changed_path in changed_relative_paths:
         chunks = store.get_chunks_for_file(changed_path) if hasattr(store, 'get_chunks_for_file') else _load_chunks_from_store(store, changed_path)
@@ -188,9 +221,15 @@ def run_index(
                 except Exception:
                     pass
 
-    pass3_paths = changed_relative_paths | dependent_paths
+    # Resume: include files at 'relationships_extracted' stage
+    resume_rels_extracted = [fp for fp, stage in file_stages.items() if stage == "relationships_extracted"]
+    pass3_paths = changed_relative_paths | dependent_paths | set(resume_rels_extracted)
 
     for filepath, language_name in source_files:
+        # Shutdown check
+        if shutdown_event and shutdown_event.is_set():
+            break
+
         language = Language(language_name)
         relative_path = str(filepath.relative_to(repo_root))
 
@@ -231,6 +270,9 @@ def run_index(
 
         write_markdown(chunks, repo_root, config.output_dir, relationships=all_rels)
 
+        # Set stage to complete after final markdown write
+        store.set_pipeline_stage(relative_path, "complete")
+
     # Phase 3: Delete removed files
     explicit_deleted = set(deleted_paths) if deleted_paths else set()
     auto_deleted = indexed_paths - source_paths
@@ -243,6 +285,12 @@ def run_index(
         if md_path.exists():
             md_path.unlink()
         result.deleted_files += 1
+
+    # Shutdown message
+    if shutdown_event and shutdown_event.is_set():
+        remaining = store.get_incomplete_files()
+        if progress:
+            progress.console.print(f"[yellow]Interrupted. {len(remaining)} files remaining. Run 'glma index' to resume.[/yellow]")
 
     if progress:
         progress.finish()
