@@ -7,15 +7,15 @@
 | Field | Value |
 |-------|-------|
 | **Milestone** | v1.4 — Hardening & Expansion |
-| **Phase** | Not started |
-| **Status** | Roadmap defined |
-| **Next Action** | Begin Phase 16 — Pipeline Reliability |
+| **Phase** | 16 — Pipeline Reliability |
+| **Status** | Context gathered |
+| **Next Action** | Plan Phase 16 |
 
 ## Phase Progress
 
 | Phase | Name | Status | Requirements |
 |-------|------|--------|-------------|
-| 16 | Pipeline Reliability | Not started | PIPE-01 through PIPE-06 |
+| 16 | Pipeline Reliability | Context gathered | PIPE-01 through PIPE-06 |
 | 17 | Config Relocation | Not started | CONF-01 |
 | 18 | Extended Language Support | Not started | LANG-01 through LANG-06 |
 | 19 | LLM Query Rewriting | Not started | REWR-01 through REWR-06 |
