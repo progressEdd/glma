@@ -23,7 +23,7 @@ class Language(str, Enum):
 
 class Chunk(BaseModel):
     """A semantic code chunk extracted from a source file."""
-    id: str = Field(..., description="Unique identifier: {file_path}::{chunk_type}::{name}::{start_line}")
+    id: str = Field(..., description="Unique identifier: {file_path}::{name}::{start_line}::{hash8}")
     file_path: str = Field(..., description="Relative path from repo root")
     chunk_type: ChunkType
     name: str = Field(..., description="Name of the function, class, or method")

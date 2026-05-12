@@ -15,9 +15,10 @@ def _content_hash(content: str) -> str:
     return hashlib.blake2b(content.encode("utf-8"), digest_size=32).hexdigest()
 
 
-def _chunk_id(file_path: str, chunk_type: str, name: str, start_line: int) -> str:
-    """Generate a unique chunk ID."""
-    return f"{file_path}::{chunk_type}::{name}::{start_line}"
+def _chunk_id(file_path: str, name: str, start_line: int, content_hash: str) -> str:
+    """Generate a unique chunk ID with content hash suffix."""
+    hash8 = content_hash[:8]
+    return f"{file_path}::{name}::{start_line}::{hash8}"
 
 
 def _extract_node_name(node: Node, source_bytes: bytes, language: Language) -> str:
@@ -84,8 +85,10 @@ def _walk_chunks(
             end_line = child.end_point[0] + 1
             name = _extract_node_name(child, source_bytes, language)
 
+            content_hash = _content_hash(content)
+
             chunk_type = ChunkType(chunk_type_str)
-            cid = _chunk_id(file_path, chunk_type_str, name, start_line)
+            cid = _chunk_id(file_path, name, start_line, content_hash)
 
             # Determine chunk_type: if inside a class_definition and it's a function, it's a method
             actual_type = chunk_type
@@ -103,7 +106,7 @@ def _walk_chunks(
                 summary=None,
                 start_line=start_line,
                 end_line=end_line,
-                content_hash=_content_hash(content),
+                content_hash=content_hash,
                 parent_id=parent_id,
             )
             chunks.append(chunk)
