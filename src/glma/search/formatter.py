@@ -22,16 +22,31 @@ def _get_lang_hint(file_path: str) -> str:
     return ""
 
 
-def format_search_markdown(results: list[SearchResult]) -> str:
+def format_search_markdown(
+    results: list[SearchResult],
+    original_query: Optional[str] = None,
+    rewritten_query: Optional[str] = None,
+) -> str:
     """Format search results as lean markdown — file heading + code blocks + summary annotations.
 
     No scores, no line numbers, no chunk names in output.
     Consumers who need metadata use glma query <file> or JSON format.
     """
-    if not results:
-        return ""
-
     lines: list[str] = []
+
+    # Query header
+    if original_query is not None:
+        if rewritten_query is not None:
+            lines.append(f'# Query: "{original_query}"')
+            lines.append(f'# Rewritten: "{rewritten_query}"')
+            lines.append("")
+        else:
+            lines.append(f'# Query: "{original_query}" (raw)')
+            lines.append("")
+
+    if not results:
+        return "\n".join(lines)
+
     current_file = None
 
     for result in results:
@@ -55,12 +70,27 @@ def format_search_markdown(results: list[SearchResult]) -> str:
     return "\n".join(lines)
 
 
-def format_search_kv(results: list[SearchResult]) -> str:
+def format_search_kv(
+    results: list[SearchResult],
+    original_query: Optional[str] = None,
+    rewritten_query: Optional[str] = None,
+) -> str:
     """Format search results as key-value markdown."""
-    if not results:
-        return ""
-
     lines: list[str] = []
+
+    # Query header
+    if original_query is not None:
+        if rewritten_query is not None:
+            lines.append(f'# Query: "{original_query}"')
+            lines.append(f'# Rewritten: "{rewritten_query}"')
+            lines.append("")
+        else:
+            lines.append(f'# Query: "{original_query}" (raw)')
+            lines.append("")
+
+    if not results:
+        return "\n".join(lines)
+
     current_file = None
 
     for result in results:
@@ -92,9 +122,13 @@ def format_search_json(
     results: list[SearchResult],
     query: str,
     search_mode: str,
+    original_query: Optional[str] = None,
+    rewritten_query: Optional[str] = None,
 ) -> str:
     """Format search results as JSON with full metadata."""
     data = {
+        "original_query": original_query if original_query is not None else query,
+        "rewritten_query": rewritten_query,
         "query": query,
         "search_mode": search_mode,
         "total_results": len(results),
@@ -123,10 +157,14 @@ def format_search_yaml(
     results: list[SearchResult],
     query: str,
     search_mode: str,
+    original_query: Optional[str] = None,
+    rewritten_query: Optional[str] = None,
 ) -> str:
     """Format search results as YAML with full metadata."""
     import yaml
     data = {
+        "original_query": original_query if original_query is not None else query,
+        "rewritten_query": rewritten_query,
         "query": query,
         "search_mode": search_mode,
         "total_results": len(results),
@@ -156,23 +194,27 @@ def format_search_output(
     output_format: str,
     query: str,
     search_mode: str,
+    original_query: Optional[str] = None,
+    rewritten_query: Optional[str] = None,
 ) -> str:
     """Dispatch to the appropriate formatter based on output format string.
 
     Args:
         results: Search results to format.
         output_format: One of 'markdown', 'markdown-kv', 'json', 'yaml'.
-        query: Original search query (for JSON/YAML metadata).
+        query: Search query used (for JSON/YAML metadata).
         search_mode: Search mode used (for JSON/YAML metadata).
+        original_query: Original user query before rewriting.
+        rewritten_query: LLM-rewritten query (None if raw mode).
 
     Returns:
         Formatted string.
     """
     if output_format == "json":
-        return format_search_json(results, query, search_mode)
+        return format_search_json(results, query, search_mode, original_query=original_query, rewritten_query=rewritten_query)
     elif output_format == "yaml":
-        return format_search_yaml(results, query, search_mode)
+        return format_search_yaml(results, query, search_mode, original_query=original_query, rewritten_query=rewritten_query)
     elif output_format == "markdown-kv":
-        return format_search_kv(results)
+        return format_search_kv(results, original_query=original_query, rewritten_query=rewritten_query)
     else:  # markdown (default)
-        return format_search_markdown(results)
+        return format_search_markdown(results, original_query=original_query, rewritten_query=rewritten_query)

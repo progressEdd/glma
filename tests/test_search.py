@@ -283,6 +283,24 @@ class TestFormatSearchMarkdown:
         output = format_search_markdown([r1, r2])
         assert output.count("# src/foo.py") == 1
 
+    def test_no_query_header_when_no_params(self):
+        r = _make_result()
+        output = format_search_markdown([r])
+        assert "Query:" not in output
+        assert "Rewritten:" not in output
+
+    def test_query_header_with_rewrite(self):
+        r = _make_result()
+        output = format_search_markdown([r], original_query="auth", rewritten_query="authentication login")
+        assert '# Query: "auth"' in output
+        assert '# Rewritten: "authentication login"' in output
+
+    def test_query_header_raw_mode(self):
+        r = _make_result()
+        output = format_search_markdown([r], original_query="auth")
+        assert '# Query: "auth" (raw)' in output
+        assert "Rewritten:" not in output
+
 
 class TestFormatSearchJson:
     """Test JSON formatter."""
@@ -311,6 +329,21 @@ class TestFormatSearchJson:
         assert data["total_results"] == 0
         assert data["results"] == []
 
+    def test_backward_compat_no_rewrite_params(self):
+        r = _make_result()
+        output = format_search_json([r], "q", "hybrid")
+        data = json.loads(output)
+        assert data["original_query"] == "q"
+        assert data["rewritten_query"] is None
+
+    def test_rewrite_fields(self):
+        r = _make_result()
+        output = format_search_json([r], "auth login", "hybrid", original_query="auth", rewritten_query="authentication login session")
+        data = json.loads(output)
+        assert data["original_query"] == "auth"
+        assert data["rewritten_query"] == "authentication login session"
+        assert data["query"] == "auth login"
+
 
 class TestFormatSearchYaml:
     """Test YAML formatter."""
@@ -328,6 +361,13 @@ class TestFormatSearchYaml:
         data = yaml.safe_load(output)
         result = data["results"][0]
         assert result["scores"]["combined"] == 0.7
+
+    def test_rewrite_fields(self):
+        r = _make_result()
+        output = format_search_yaml([r], "auth login", "hybrid", original_query="auth", rewritten_query="authentication login session")
+        data = yaml.safe_load(output)
+        assert data["original_query"] == "auth"
+        assert data["rewritten_query"] == "authentication login session"
 
 
 class TestFormatSearchKv:
@@ -349,6 +389,12 @@ class TestFormatSearchKv:
         r = _make_result()
         output = format_search_kv([r])
         assert "## my_func" in output
+
+    def test_query_header_with_rewrite(self):
+        r = _make_result()
+        output = format_search_kv([r], original_query="auth", rewritten_query="authentication")
+        assert '# Query: "auth"' in output
+        assert '# Rewritten: "authentication"' in output
 
 
 class TestFormatSearchOutput:
@@ -376,6 +422,13 @@ class TestFormatSearchOutput:
         output = format_search_output([r], "markdown", "q", "hybrid")
         assert "```python" in output
         assert "score" not in output
+
+    def test_dispatch_with_rewrite_params_json(self):
+        r = _make_result()
+        output = format_search_output([r], "json", "q", "hybrid", original_query="test", rewritten_query="expanded")
+        data = json.loads(output)
+        assert data["original_query"] == "test"
+        assert data["rewritten_query"] == "expanded"
 
 
 # ── CLI Tests ────────────────────────────────────────────────────────
