@@ -684,6 +684,26 @@ def search(
     vector_dimensions: Optional[int] = typer.Option(None, "--vector-dimensions", help="Embedding vector dimensions."),
     similarity_threshold: Optional[float] = typer.Option(None, "--similarity-threshold", help="Minimum similarity score for results (0.0-1.0)."),
     quiet: bool = typer.Option(False, "--quiet", "-q", help="Suppress progress output."),
+    raw: bool = typer.Option(
+        False,
+        "--raw",
+        help="Skip LLM query rewriting. Search with raw user query.",
+    ),
+    summarize_provider: Optional[str] = typer.Option(
+        None,
+        "--summarize-provider",
+        help="Summarization provider for query rewriting: preset name or leave unset for auto-detect.",
+    ),
+    summarize_model: Optional[str] = typer.Option(
+        None,
+        "--summarize-model",
+        help="Model name for query rewriting (e.g., 'llama3', 'codellama').",
+    ),
+    ai_url: Optional[str] = typer.Option(
+        None,
+        "--ai-url",
+        help="Override API base URL for the query rewriting provider.",
+    ),
 ) -> None:
     """Search indexed code using hybrid keyword + vector similarity."""
     from glma.models import ExportFormat
@@ -740,6 +760,34 @@ def search(
     # Load search config
     search_cfg = load_search_config(repo_root_path, search_overrides)
 
+    # Query rewriting (unless --raw)
+    rewritten_query = None
+    if not raw:
+        from glma.config import load_summarize_config
+        from glma.search.rewriter import rewrite_query
+
+        # Build summarize overrides for rewrite provider
+        summarize_overrides: dict = {}
+        if summarize_provider:
+            summarize_overrides["provider"] = summarize_provider
+        if summarize_model:
+            summarize_overrides["model"] = summarize_model
+        if ai_url:
+            summarize_overrides["base_url"] = ai_url
+
+        summ_cfg = load_summarize_config(repo_root_path, summarize_overrides)
+
+        try:
+            rewritten_query = rewrite_query(
+                query=query_text,
+                base_url=summ_cfg.base_url,
+                model=summ_cfg.model,
+                rewrite_prompt=search_cfg.rewrite_prompt,
+            )
+        except Exception as e:
+            sys.stderr.write(f"Rewrite failed: {e}. Using raw query.\n")
+            rewritten_query = None
+
     # Instantiate embedding provider
     from glma.embedding.providers import OpenAIEmbeddingProvider
     try:
@@ -760,7 +808,8 @@ def search(
     engine = HybridSearchEngine(store, provider, search_cfg)
 
     try:
-        results = engine.search(query_text, mode=search_mode)
+        effective_query = rewritten_query if rewritten_query is not None else query_text
+        results = engine.search(effective_query, mode=search_mode)
     except ValueError as e:
         sys.stderr.write(f"{e}\n")
         raise typer.Exit(1)
@@ -771,7 +820,11 @@ def search(
         raise typer.Exit(0)
 
     # Format and output
-    formatted = format_search_output(results, output_format, query_text, search_mode)
+    formatted = format_search_output(
+        results, output_format, effective_query, search_mode,
+        original_query=query_text,
+        rewritten_query=rewritten_query,
+    )
     _write_output(formatted, output)
 
     if not quiet:
