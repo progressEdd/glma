@@ -26,6 +26,7 @@ def format_search_markdown(
     results: list[SearchResult],
     original_query: Optional[str] = None,
     rewritten_query: Optional[str] = None,
+    graph_enabled: bool = False,
 ) -> str:
     """Format search results as lean markdown — file heading + code blocks + summary annotations.
 
@@ -65,6 +66,8 @@ def format_search_markdown(
         lines.append("```")
         if result.summary:
             lines.append(f"> *Summary: {result.summary}*")
+        if graph_enabled:
+            lines.append(f"> *Scores: graph={result.graph_score:.2f}, keyword={result.keyword_score:.2f}, vector={result.vector_score:.2f}, combined={result.combined_score:.2f}*")
         lines.append("")
 
     return "\n".join(lines)
@@ -74,6 +77,7 @@ def format_search_kv(
     results: list[SearchResult],
     original_query: Optional[str] = None,
     rewritten_query: Optional[str] = None,
+    graph_enabled: bool = False,
 ) -> str:
     """Format search results as key-value markdown."""
     lines: list[str] = []
@@ -106,6 +110,10 @@ def format_search_kv(
         lines.append(f"type: {result.chunk_type}")
         lines.append(f"lines: L{result.start_line}-L{result.end_line}")
         lines.append(f"score: {result.combined_score:.3f}")
+        if graph_enabled:
+            lines.append(f"graph_score: {result.graph_score:.3f}")
+            lines.append(f"keyword_score: {result.keyword_score:.3f}")
+            lines.append(f"vector_score: {result.vector_score:.3f}")
         if result.summary:
             lines.append(f"summary: {result.summary}")
         lang = _get_lang_hint(result.file_path)
@@ -124,6 +132,7 @@ def format_search_json(
     search_mode: str,
     original_query: Optional[str] = None,
     rewritten_query: Optional[str] = None,
+    graph_enabled: bool = False,
 ) -> str:
     """Format search results as JSON with full metadata."""
     data = {
@@ -144,6 +153,7 @@ def format_search_json(
                 "scores": {
                     "keyword": round(r.keyword_score, 4),
                     "vector": round(r.vector_score, 4),
+                    **({"graph": round(r.graph_score, 4)} if graph_enabled else {}),
                     "combined": round(r.combined_score, 4),
                 },
             }
@@ -159,6 +169,7 @@ def format_search_yaml(
     search_mode: str,
     original_query: Optional[str] = None,
     rewritten_query: Optional[str] = None,
+    graph_enabled: bool = False,
 ) -> str:
     """Format search results as YAML with full metadata."""
     import yaml
@@ -180,6 +191,7 @@ def format_search_yaml(
                 "scores": {
                     "keyword": round(r.keyword_score, 4),
                     "vector": round(r.vector_score, 4),
+                    **({"graph": round(r.graph_score, 4)} if graph_enabled else {}),
                     "combined": round(r.combined_score, 4),
                 },
             }
@@ -196,6 +208,7 @@ def format_search_output(
     search_mode: str,
     original_query: Optional[str] = None,
     rewritten_query: Optional[str] = None,
+    graph_enabled: bool = False,
 ) -> str:
     """Dispatch to the appropriate formatter based on output format string.
 
@@ -211,10 +224,10 @@ def format_search_output(
         Formatted string.
     """
     if output_format == "json":
-        return format_search_json(results, query, search_mode, original_query=original_query, rewritten_query=rewritten_query)
+        return format_search_json(results, query, search_mode, original_query=original_query, rewritten_query=rewritten_query, graph_enabled=graph_enabled)
     elif output_format == "yaml":
-        return format_search_yaml(results, query, search_mode, original_query=original_query, rewritten_query=rewritten_query)
+        return format_search_yaml(results, query, search_mode, original_query=original_query, rewritten_query=rewritten_query, graph_enabled=graph_enabled)
     elif output_format == "markdown-kv":
-        return format_search_kv(results, original_query=original_query, rewritten_query=rewritten_query)
+        return format_search_kv(results, original_query=original_query, rewritten_query=rewritten_query, graph_enabled=graph_enabled)
     else:  # markdown (default)
-        return format_search_markdown(results, original_query=original_query, rewritten_query=rewritten_query)
+        return format_search_markdown(results, original_query=original_query, rewritten_query=rewritten_query, graph_enabled=graph_enabled)

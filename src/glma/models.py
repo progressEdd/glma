@@ -181,8 +181,11 @@ class SearchConfig(BaseModel):
     embedding_base_url: str = Field(default="http://localhost:1234/v1", description="OpenAI-compatible API base URL for embeddings")
     vector_dimensions: int = Field(default=768, ge=1, description="Embedding vector dimensions (must match model output)")
     similarity_threshold: float = Field(default=0.5, ge=0.0, le=1.0, description="Minimum similarity score for search results")
-    hybrid_keyword_weight: float = Field(default=0.5, ge=0.0, le=1.0, description="Weight for keyword search in hybrid scoring")
-    hybrid_vector_weight: float = Field(default=0.5, ge=0.0, le=1.0, description="Weight for vector search in hybrid scoring")
+    hybrid_keyword_weight: float = Field(default=0.3, ge=0.0, le=1.0, description="Weight for keyword search in hybrid scoring")
+    hybrid_vector_weight: float = Field(default=0.3, ge=0.0, le=1.0, description="Weight for vector search in hybrid scoring")
+    graph_weight: float = Field(default=0.4, ge=0.0, le=1.0, description="Weight for graph proximity in 3-way hybrid scoring")
+    graph_depth: int = Field(default=2, ge=1, le=5, description="Maximum graph BFS traversal depth")
+    graph_fanout: int = Field(default=10, ge=1, le=100, description="Number of seed chunks from keyword+vector results for graph traversal")
     custom_providers: dict[str, dict[str, str]] = Field(default_factory=dict, description="Custom embedding provider presets: name -> {base_url, model}")
     rewrite_prompt: Optional[str] = Field(
         default=None,
@@ -191,7 +194,7 @@ class SearchConfig(BaseModel):
 
     @model_validator(mode="after")
     def _validate_hybrid_weights(self) -> "SearchConfig":
-        total = self.hybrid_keyword_weight + self.hybrid_vector_weight
+        total = self.hybrid_keyword_weight + self.hybrid_vector_weight + self.graph_weight
         if abs(total - 1.0) > 0.05:
             raise ValueError(f"Hybrid weights must sum to ~1.0, got {total:.2f}")
         return self

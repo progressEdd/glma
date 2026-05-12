@@ -25,6 +25,7 @@ class SearchResult:
     end_line: int
     keyword_score: float = 0.0
     vector_score: float = 0.0
+    graph_score: float = 0.0
     combined_score: float = 0.0
 
 
@@ -45,12 +46,13 @@ class HybridSearchEngine:
         self._provider = provider
         self._config = config
 
-    def search(self, query: str, mode: str = "hybrid") -> list[SearchResult]:
+    def search(self, query: str, mode: str = "hybrid", graph: bool = False) -> list[SearchResult]:
         """Run hybrid search and return ranked, filtered results.
 
         Args:
             query: Natural language search query.
             mode: Search strategy — 'hybrid', 'vector', or 'keyword'.
+            graph: If True, enable 3-way hybrid scoring with graph traversal.
 
         Returns:
             List of SearchResult sorted by combined_score descending,
@@ -130,6 +132,69 @@ class HybridSearchEngine:
                 combined_score=combined,
             ))
 
+        # Graph traversal phase (3-way hybrid)
+        if graph and results:
+            # Get seeds from current results (top-K by combined score)
+            seeds = sorted(results, key=lambda r: r.combined_score, reverse=True)
+            seed_ids = [r.chunk_id for r in seeds[:self._config.graph_fanout]]
+
+            if seed_ids:
+                # Run BFS traversal
+                edges = self._store.traverse_relationships(
+                    seed_ids, max_depth=self._config.graph_depth
+                )
+
+                # Extract discovered chunks with minimum depth
+                seed_id_set = set(seed_ids)
+                chunk_min_depth: dict[str, float] = {}
+                for edge in edges:
+                    # Skip self-referential edges
+                    source_id = edge.get("source_id", "")
+                    target_id = edge.get("target_id", "")
+                    if source_id == target_id:
+                        continue
+
+                    # Determine the discovered chunk ID
+                    direction = edge.get("direction", "outgoing")
+                    if direction == "incoming":
+                        discovered_id = source_id
+                    else:
+                        discovered_id = target_id
+
+                    depth = edge.get("depth", 1)
+                    if discovered_id and discovered_id not in seed_id_set:
+                        if discovered_id not in chunk_min_depth or depth < chunk_min_depth[discovered_id]:
+                            chunk_min_depth[discovered_id] = depth
+
+                # Fetch metadata for graph-discovered chunks
+                if chunk_min_depth:
+                    discovered_ids = list(chunk_min_depth.keys())
+                    discovered_meta = self._store.get_chunks_by_ids(discovered_ids)
+                    meta_by_id = {m["id"]: m for m in discovered_meta}
+
+                    # Add graph-only chunks to results
+                    existing_ids = {r.chunk_id for r in results}
+                    for cid, depth in chunk_min_depth.items():
+                        if cid not in existing_ids and cid in meta_by_id:
+                            m = meta_by_id[cid]
+                            results.append(SearchResult(
+                                chunk_id=cid,
+                                file_path=m.get("file_path", ""),
+                                chunk_name=m.get("name", ""),
+                                chunk_type=m.get("chunk_type", ""),
+                                content=m.get("content", ""),
+                                summary=m.get("summary", ""),
+                                start_line=m.get("start_line", 0),
+                                end_line=m.get("end_line", 0),
+                                keyword_score=0.0,
+                                vector_score=0.0,
+                                graph_score=1.0 / depth,
+                            ))
+
+            # Normalize all three dimensions and compute 3-way combined score
+            if results:
+                self._normalize_and_combine_3way(results)
+
         # Sort by combined score descending
         results.sort(key=lambda r: r.combined_score, reverse=True)
 
@@ -138,11 +203,44 @@ class HybridSearchEngine:
         filtered = [r for r in results if r.combined_score >= threshold]
 
         logger.info(
-            "Search '%s' (mode=%s): %d candidates, %d above threshold %.2f",
-            query, mode, len(results), len(filtered), threshold,
+            "Search '%s' (mode=%s, graph=%s): %d candidates, %d above threshold %.2f",
+            query, mode, graph, len(results), len(filtered), threshold,
         )
 
         return filtered
+
+    def _normalize_and_combine_3way(self, results: list[SearchResult]) -> None:
+        """Min-max normalize graph, keyword, and vector scores, then combine with 3-way weights.
+
+        Modifies results in-place, setting normalized scores and combined_score.
+        """
+        if not results:
+            return
+
+        EPSILON = 1e-9
+
+        def min_max_normalize(values: list[float]) -> list[float]:
+            min_v = min(values)
+            max_v = max(values)
+            range_v = max_v - min_v
+            return [(v - min_v) / (range_v + EPSILON) for v in values]
+
+        # Normalize each dimension
+        norm_graph = min_max_normalize([r.graph_score for r in results])
+        norm_kw = min_max_normalize([r.keyword_score for r in results])
+        norm_vec = min_max_normalize([r.vector_score for r in results])
+
+        # Get weights from config
+        g_w = self._config.graph_weight
+        kw_w = self._config.hybrid_keyword_weight
+        vec_w = self._config.hybrid_vector_weight
+
+        # Update scores to normalized values and compute combined
+        for i, r in enumerate(results):
+            r.graph_score = norm_graph[i]
+            r.keyword_score = norm_kw[i]
+            r.vector_score = norm_vec[i]
+            r.combined_score = g_w * norm_graph[i] + kw_w * norm_kw[i] + vec_w * norm_vec[i]
 
     @staticmethod
     def _fuzzy_score_all(
