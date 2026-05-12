@@ -105,7 +105,7 @@
 
 ---
 
-## Phase 19 — LLM Query Rewriting
+## ✓ Phase 19 — LLM Query Rewriting
 
 **Goal:** Add `glma search` command that uses LLM to rewrite user queries into codebase-relevant search terms before running hybrid search. Rewriting uses the existing summarizer provider/model infrastructure.
 

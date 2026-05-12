@@ -16,12 +16,12 @@
 
 ### LLM Query Rewriting
 
-- [ ] **REWR-01**: New `glma search` command — LLM rewrites query by default, then runs hybrid search
-- [ ] **REWR-02**: `--raw` flag skips LLM rewriting, runs search with raw user query
-- [ ] **REWR-03**: Rewrite uses existing summarizer provider/model infrastructure
-- [ ] **REWR-04**: Original query preserved in output for transparency/debugging
-- [ ] **REWR-05**: Rewrite prompt tuned for code search — expands vague terms, adds likely tokens, preserves intent
-- [ ] **REWR-06**: `[search]` config section supports `rewrite_prompt` overrides
+- [x] **REWR-01**: New `glma search` command — LLM rewrites query by default, then runs hybrid search
+- [x] **REWR-02**: `--raw` flag skips LLM rewriting, runs search with raw user query
+- [x] **REWR-03**: Rewrite uses existing summarizer provider/model infrastructure
+- [x] **REWR-04**: Original query preserved in output for transparency/debugging
+- [x] **REWR-05**: Rewrite prompt tuned for code search — expands vague terms, adds likely tokens, preserves intent
+- [x] **REWR-06**: `[search]` config section supports `rewrite_prompt` overrides
 
 ### Extended Language Support
 

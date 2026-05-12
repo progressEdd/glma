@@ -159,4 +159,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-05-09 after Phase 13 completion (embedding infrastructure)*
+*Last updated: 2026-05-12 after Phase 19 completion (LLM query rewriting)*
