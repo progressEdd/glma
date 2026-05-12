@@ -3,7 +3,7 @@ gsd_state_version: 1.0
 milestone: v1.4
 milestone_name: milestone
 status: Ready to plan
-last_updated: "2026-05-12T16:30:13.547Z"
+last_updated: "2026-05-12T16:30:53.630Z"
 progress:
   total_phases: 16
   completed_phases: 15
@@ -20,15 +20,16 @@ progress:
 | Field | Value |
 |-------|-------|
 | **Milestone** | v1.4 — Hardening & Expansion |
-| **Phase** | 16 — Pipeline Reliability |
-| **Status** | Execution complete, pending verification |
-| **Next Action** | Verify Phase 16 |
+| **Phase** | 17 — Config Relocation |
+| **Status** | Context gathered, ready to plan |
+| **Next Action** | Plan Phase 17 |
 
 ## Phase Progress
 
 | Phase | Name | Status | Requirements |
 |-------|------|--------|-------------|
-| 16 | Pipeline Reliability | Executed | PIPE-01 through PIPE-06 |
+| 16 | Pipeline Reliability | Complete | PIPE-01 through PIPE-06 |
+| 17 | Config Relocation | Context gathered | CONF-01 |
 | 17 | Config Relocation | Not started | CONF-01 |
 | 18 | Extended Language Support | Not started | LANG-01 through LANG-06 |
 | 19 | LLM Query Rewriting | Not started | REWR-01 through REWR-06 |
