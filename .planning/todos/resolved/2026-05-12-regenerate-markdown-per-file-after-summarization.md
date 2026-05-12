@@ -2,7 +2,7 @@
 created: 2026-05-12T00:00:00Z
 title: Regenerate markdown per-file after summarization instead of batching at end
 area: cli
-status: open
+status: resolved
 files:
   - src/glma/cli.py
 ---

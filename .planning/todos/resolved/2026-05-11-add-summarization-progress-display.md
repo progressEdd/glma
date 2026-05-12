@@ -2,7 +2,7 @@
 created: 2026-05-11T00:00:00Z
 title: Add summarization progress display to CLI
 area: cli
-status: open
+status: resolved
 files:
   - src/glma/cli.py
   - src/glma/summarize/pipeline.py

@@ -2,7 +2,7 @@
 created: 2026-05-11T00:00:00Z
 title: Add resume/checkpoint support to indexing pipeline
 area: core
-status: pending
+status: resolved
 files:
   - 02-worktrees/glma/src/glma/index/pipeline.py
   - 02-worktrees/glma/src/glma/db/ladybug_store.py
