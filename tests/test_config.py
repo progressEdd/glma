@@ -216,8 +216,11 @@ class TestSearchConfigDefaults:
         assert cfg.embedding_base_url == "http://localhost:1234/v1"
         assert cfg.vector_dimensions == 768
         assert cfg.similarity_threshold == 0.5
-        assert cfg.hybrid_keyword_weight == 0.5
-        assert cfg.hybrid_vector_weight == 0.5
+        assert cfg.hybrid_keyword_weight == 0.3
+        assert cfg.hybrid_vector_weight == 0.3
+        assert cfg.graph_weight == 0.4
+        assert cfg.graph_depth == 2
+        assert cfg.graph_fanout == 10
 
 
 class TestSearchConfigValidation:
@@ -241,12 +244,12 @@ class TestSearchConfigValidation:
         from glma.models import SearchConfig
         from pydantic import ValidationError
         with pytest.raises(ValidationError):
-            SearchConfig(hybrid_keyword_weight=0.3, hybrid_vector_weight=0.3)
+            SearchConfig(hybrid_keyword_weight=0.1, hybrid_vector_weight=0.1)
 
     def test_weights_default_valid(self, tmp_path):
         from glma.models import SearchConfig
         cfg = SearchConfig()
-        assert abs(cfg.hybrid_keyword_weight + cfg.hybrid_vector_weight - 1.0) < 0.01
+        assert abs(cfg.hybrid_keyword_weight + cfg.hybrid_vector_weight + cfg.graph_weight - 1.0) < 0.01
 
 
 class TestSearchConfigFile:

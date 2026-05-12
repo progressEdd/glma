@@ -704,6 +704,21 @@ def search(
         "--ai-url",
         help="Override API base URL for the query rewriting provider.",
     ),
+    graph: bool = typer.Option(
+        False,
+        "--graph",
+        help="Enable 3-way hybrid search with graph relationship traversal.",
+    ),
+    graph_depth: Optional[int] = typer.Option(
+        None,
+        "--graph-depth",
+        help="Max graph traversal depth (default: 2).",
+    ),
+    graph_fanout: Optional[int] = typer.Option(
+        None,
+        "--graph-fanout",
+        help="Number of seed chunks for graph traversal (default: 10).",
+    ),
 ) -> None:
     """Search indexed code using hybrid keyword + vector similarity."""
     from glma.models import ExportFormat
@@ -756,6 +771,10 @@ def search(
         search_overrides["vector_dimensions"] = vector_dimensions
     if similarity_threshold is not None:
         search_overrides["similarity_threshold"] = similarity_threshold
+    if graph_depth is not None:
+        search_overrides["graph_depth"] = graph_depth
+    if graph_fanout is not None:
+        search_overrides["graph_fanout"] = graph_fanout
 
     # Load search config
     search_cfg = load_search_config(repo_root_path, search_overrides)
@@ -809,7 +828,7 @@ def search(
 
     try:
         effective_query = rewritten_query if rewritten_query is not None else query_text
-        results = engine.search(effective_query, mode=search_mode)
+        results = engine.search(effective_query, mode=search_mode, graph=graph)
     except ValueError as e:
         sys.stderr.write(f"{e}\n")
         raise typer.Exit(1)
@@ -824,6 +843,7 @@ def search(
         results, output_format, effective_query, search_mode,
         original_query=query_text,
         rewritten_query=rewritten_query,
+        graph_enabled=graph,
     )
     _write_output(formatted, output)
 

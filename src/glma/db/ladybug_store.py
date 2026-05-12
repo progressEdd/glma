@@ -618,6 +618,36 @@ class LadybugStore:
 
         return results
 
+    def get_chunks_by_ids(self, chunk_ids: list[str]) -> list[dict]:
+        """Fetch chunk metadata for a list of chunk IDs.
+
+        Args:
+            chunk_ids: List of chunk ID strings.
+
+        Returns:
+            List of chunk dicts with id, file_path, name, chunk_type,
+            content, summary, start_line, end_line fields.
+        """
+        if not chunk_ids:
+            return []
+        placeholders = ", ".join([f"${i}" for i in range(len(chunk_ids))])
+        query = f"MATCH (c:Chunk) WHERE c.id IN [{placeholders}] RETURN c.id, c.file_path, c.name, c.chunk_type, c.content, c.summary, c.start_line, c.end_line"
+        params = {str(i): cid for i, cid in enumerate(chunk_ids)}
+        result = self.conn.execute(query, params)
+        rows = []
+        for row in result:
+            rows.append({
+                "id": row[0],
+                "file_path": row[1],
+                "name": row[2],
+                "chunk_type": row[3],
+                "content": row[4] or "",
+                "summary": row[5] or "",
+                "start_line": row[6],
+                "end_line": row[7],
+            })
+        return rows
+
     def update_chunk_embedding(self, chunk_id: str, embedding: list[float], summary_hash: str, vector_dimensions: int) -> None:
         """Update the embedding fields of a single chunk.
 

@@ -95,8 +95,9 @@ class TestFuzzyScoreAll:
 def _make_config(**overrides) -> SearchConfig:
     defaults = {
         "similarity_threshold": 0.3,
-        "hybrid_keyword_weight": 0.5,
-        "hybrid_vector_weight": 0.5,
+        "hybrid_keyword_weight": 0.3,
+        "hybrid_vector_weight": 0.3,
+        "graph_weight": 0.4,
     }
     defaults.update(overrides)
     return SearchConfig(**defaults)
@@ -240,7 +241,7 @@ def _make_result(**overrides) -> SearchResult:
         chunk_id="id1", file_path="src/foo.py", chunk_name="my_func",
         chunk_type="function", content="def my_func():\n    pass",
         summary="A test function", start_line=1, end_line=2,
-        keyword_score=0.8, vector_score=0.6, combined_score=0.7,
+        keyword_score=0.8, vector_score=0.6, graph_score=0.0, combined_score=0.7,
     )
     defaults.update(overrides)
     return SearchResult(**defaults)
@@ -488,6 +489,27 @@ class TestSearchCLI:
         assert "--summarize-model" in result.stdout
         assert "--ai-url" in result.stdout
 
+    def test_graph_flag_in_help(self):
+        result = subprocess.run(
+            [sys.executable, "-m", "glma", "search", "--help"],
+            capture_output=True, text=True,
+        )
+        assert "--graph" in result.stdout
+
+    def test_graph_depth_flag_in_help(self):
+        result = subprocess.run(
+            [sys.executable, "-m", "glma", "search", "--help"],
+            capture_output=True, text=True,
+        )
+        assert "--graph-depth" in result.stdout
+
+    def test_graph_fanout_flag_in_help(self):
+        result = subprocess.run(
+            [sys.executable, "-m", "glma", "search", "--help"],
+            capture_output=True, text=True,
+        )
+        assert "--graph-fanout" in result.stdout
+
 
 # ── Integration Test: Full Search Pipeline ───────────────────────────
 
@@ -619,3 +641,246 @@ class TestRewriteIntegration:
         )
         assert result.returncode == 0
         assert "--raw" in result.stdout
+
+
+# ── 3-Way Config Tests ────────────────────────────────────────────────
+
+
+class TestSearchConfig3Way:
+    """Test SearchConfig 3-way weight validation."""
+
+    def test_valid_3way_defaults(self):
+        cfg = SearchConfig()
+        assert cfg.graph_weight == 0.4
+        assert cfg.graph_depth == 2
+        assert cfg.graph_fanout == 10
+        total = cfg.hybrid_keyword_weight + cfg.hybrid_vector_weight + cfg.graph_weight
+        assert abs(total - 1.0) <= 0.05
+
+    def test_valid_custom_weights(self):
+        cfg = SearchConfig(hybrid_keyword_weight=0.5, hybrid_vector_weight=0.3, graph_weight=0.2)
+        assert abs(cfg.hybrid_keyword_weight + cfg.hybrid_vector_weight + cfg.graph_weight - 1.0) <= 0.05
+
+    def test_invalid_weight_sum_raises(self):
+        with pytest.raises(ValueError, match="sum to ~1.0"):
+            SearchConfig(hybrid_keyword_weight=0.5, hybrid_vector_weight=0.5, graph_weight=0.5)
+
+    def test_graph_depth_bounds(self):
+        cfg = SearchConfig(graph_depth=1)
+        assert cfg.graph_depth == 1
+        cfg = SearchConfig(graph_depth=5)
+        assert cfg.graph_depth == 5
+
+    def test_graph_fanout_bounds(self):
+        cfg = SearchConfig(graph_fanout=1)
+        assert cfg.graph_fanout == 1
+        cfg = SearchConfig(graph_fanout=100)
+        assert cfg.graph_fanout == 100
+
+
+# ── Graph Search Tests ────────────────────────────────────────────────
+
+
+def _mock_store_with_graph(
+    traversal_edges=None,
+    chunk_meta=None,
+    has_embeddings_val=True,
+    vector_results=None,
+    keyword_chunks=None,
+):
+    store = MagicMock()
+    store.has_embeddings.return_value = has_embeddings_val
+    store.vector_search.return_value = vector_results or []
+    store.get_chunks_with_summaries_for_keyword.return_value = keyword_chunks or []
+    store.traverse_relationships.return_value = traversal_edges or []
+    store.get_chunks_by_ids.return_value = chunk_meta or []
+    return store
+
+
+class TestGraphSearch:
+    """Test graph traversal and 3-way scoring in the engine."""
+
+    def test_graph_false_no_traversal(self):
+        """When graph=False, traverse_relationships is never called."""
+        store = _mock_store()
+        provider = _mock_provider()
+        config = _make_config()
+        engine = HybridSearchEngine(store, provider, config)
+        engine.search("test", mode="keyword", graph=False)
+        store.traverse_relationships.assert_not_called()
+
+    def test_graph_true_calls_traversal(self):
+        """When graph=True with results, traverse_relationships is called."""
+        store = _mock_store_with_graph(
+            keyword_chunks=[
+                {"id": "c1", "summary": "hello world", "file_path": "a.py",
+                 "name": "fn1", "chunk_type": "function", "content": "code",
+                 "start_line": 1, "end_line": 5},
+            ],
+            traversal_edges=[],
+            chunk_meta=[],
+        )
+        provider = _mock_provider()
+        config = _make_config(similarity_threshold=0.0)
+        engine = HybridSearchEngine(store, provider, config)
+        results = engine.search("hello world", mode="keyword", graph=True)
+        store.traverse_relationships.assert_called_once()
+
+    def test_graph_discovered_chunks_get_scores(self):
+        """Graph-discovered chunks appear in results with graph_score > 0."""
+        store = _mock_store_with_graph(
+            keyword_chunks=[
+                {"id": "c1", "summary": "hello world", "file_path": "a.py",
+                 "name": "fn1", "chunk_type": "function", "content": "code",
+                 "start_line": 1, "end_line": 5},
+            ],
+            traversal_edges=[
+                {"source_id": "c1", "target_id": "c2", "depth": 1, "direction": "outgoing"},
+            ],
+            chunk_meta=[
+                {"id": "c2", "file_path": "b.py", "name": "fn2", "chunk_type": "function",
+                 "content": "code2", "summary": "related function", "start_line": 10, "end_line": 15},
+            ],
+        )
+        provider = _mock_provider()
+        config = _make_config(similarity_threshold=0.0)
+        engine = HybridSearchEngine(store, provider, config)
+        results = engine.search("hello world", mode="keyword", graph=True)
+        # Should have both c1 (seed) and c2 (graph-discovered)
+        chunk_ids = [r.chunk_id for r in results]
+        assert "c2" in chunk_ids
+        c2_result = next(r for r in results if r.chunk_id == "c2")
+        assert c2_result.graph_score > 0.0
+        assert c2_result.keyword_score == 0.0  # graph-only chunk
+        assert c2_result.vector_score == 0.0
+
+    def test_normalization_range(self):
+        """After normalization, all scores should be in [0, ~1] range."""
+        store = _mock_store_with_graph(
+            keyword_chunks=[
+                {"id": "c1", "summary": "hello world", "file_path": "a.py",
+                 "name": "fn1", "chunk_type": "function", "content": "code",
+                 "start_line": 1, "end_line": 5},
+            ],
+            traversal_edges=[
+                {"source_id": "c1", "target_id": "c2", "depth": 1, "direction": "outgoing"},
+                {"source_id": "c1", "target_id": "c3", "depth": 2, "direction": "outgoing"},
+            ],
+            chunk_meta=[
+                {"id": "c2", "file_path": "b.py", "name": "fn2", "chunk_type": "function",
+                 "content": "code2", "summary": "related", "start_line": 10, "end_line": 15},
+                {"id": "c3", "file_path": "c.py", "name": "fn3", "chunk_type": "function",
+                 "content": "code3", "summary": "distant", "start_line": 20, "end_line": 25},
+            ],
+        )
+        provider = _mock_provider()
+        config = _make_config(similarity_threshold=0.0)
+        engine = HybridSearchEngine(store, provider, config)
+        results = engine.search("hello world", mode="keyword", graph=True)
+        for r in results:
+            assert 0.0 <= r.graph_score <= 1.0
+            assert 0.0 <= r.keyword_score <= 1.0
+            assert 0.0 <= r.vector_score <= 1.0
+            assert 0.0 <= r.combined_score <= 1.0
+
+    def test_depth_2_lower_score_than_depth_1(self):
+        """Chunks at depth 2 should have lower graph_score than depth 1 (after normalization)."""
+        store = _mock_store_with_graph(
+            keyword_chunks=[
+                {"id": "c1", "summary": "hello world", "file_path": "a.py",
+                 "name": "fn1", "chunk_type": "function", "content": "code",
+                 "start_line": 1, "end_line": 5},
+            ],
+            traversal_edges=[
+                {"source_id": "c1", "target_id": "c2", "depth": 1, "direction": "outgoing"},
+                {"source_id": "c1", "target_id": "c3", "depth": 2, "direction": "outgoing"},
+            ],
+            chunk_meta=[
+                {"id": "c2", "file_path": "b.py", "name": "fn2", "chunk_type": "function",
+                 "content": "code2", "summary": "near", "start_line": 10, "end_line": 15},
+                {"id": "c3", "file_path": "c.py", "name": "fn3", "chunk_type": "function",
+                 "content": "code3", "summary": "far", "start_line": 20, "end_line": 25},
+            ],
+        )
+        provider = _mock_provider()
+        config = _make_config(similarity_threshold=0.0)
+        engine = HybridSearchEngine(store, provider, config)
+        results = engine.search("hello world", mode="keyword", graph=True)
+        c2 = next(r for r in results if r.chunk_id == "c2")
+        c3 = next(r for r in results if r.chunk_id == "c3")
+        assert c2.graph_score > c3.graph_score
+
+    def test_self_referential_edges_skipped(self):
+        """Self-referential edges (source_id == target_id) don't add graph results."""
+        store = _mock_store_with_graph(
+            keyword_chunks=[
+                {"id": "c1", "summary": "hello world", "file_path": "a.py",
+                 "name": "fn1", "chunk_type": "function", "content": "code",
+                 "start_line": 1, "end_line": 5},
+            ],
+            traversal_edges=[
+                {"source_id": "c1", "target_id": "c1", "depth": 1, "direction": "outgoing"},
+            ],
+            chunk_meta=[],
+        )
+        provider = _mock_provider()
+        config = _make_config(similarity_threshold=0.0)
+        engine = HybridSearchEngine(store, provider, config)
+        results = engine.search("hello world", mode="keyword", graph=True)
+        # Only c1 (seed), no duplicates from self-ref edge
+        assert len([r for r in results if r.chunk_id == "c1"]) == 1
+
+
+# ── Graph Formatter Tests ─────────────────────────────────────────────
+
+
+class TestGraphFormatter:
+    """Test formatter output with graph_enabled=True."""
+
+    def test_markdown_graph_scores_annotation(self):
+        r = _make_result(graph_score=0.7)
+        output = format_search_markdown([r], graph_enabled=True)
+        assert "> *Scores: graph=0.70, keyword=" in output
+        assert "combined=" in output
+
+    def test_markdown_no_scores_when_graph_disabled(self):
+        r = _make_result()
+        output = format_search_markdown([r], graph_enabled=False)
+        assert "Scores:" not in output
+
+    def test_json_graph_score_key(self):
+        r = _make_result(graph_score=0.7)
+        output = format_search_json([r], "q", "hybrid", graph_enabled=True)
+        data = json.loads(output)
+        assert "graph" in data["results"][0]["scores"]
+        assert data["results"][0]["scores"]["graph"] == 0.7
+
+    def test_json_no_graph_key_when_disabled(self):
+        r = _make_result()
+        output = format_search_json([r], "q", "hybrid", graph_enabled=False)
+        data = json.loads(output)
+        assert "graph" not in data["results"][0]["scores"]
+
+    def test_yaml_graph_score_key(self):
+        r = _make_result(graph_score=0.7)
+        output = format_search_yaml([r], "q", "hybrid", graph_enabled=True)
+        data = yaml.safe_load(output)
+        assert "graph" in data["results"][0]["scores"]
+
+    def test_kv_graph_scores(self):
+        r = _make_result(graph_score=0.7)
+        output = format_search_kv([r], graph_enabled=True)
+        assert "graph_score:" in output
+        assert "keyword_score:" in output
+        assert "vector_score:" in output
+
+    def test_kv_no_scores_when_disabled(self):
+        r = _make_result()
+        output = format_search_kv([r], graph_enabled=False)
+        assert "graph_score:" not in output
+
+    def test_format_search_output_dispatches_graph_enabled(self):
+        r = _make_result(graph_score=0.7)
+        output = format_search_output([r], "json", "q", "hybrid", graph_enabled=True)
+        data = json.loads(output)
+        assert "graph" in data["results"][0]["scores"]
