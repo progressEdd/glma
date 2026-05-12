@@ -51,6 +51,64 @@ def _extract_node_name(node: Node, source_bytes: bytes, language: Language) -> s
         if name_node:
             return name_node.text.decode("utf-8")
 
+    elif language == Language.CPP:
+        # C++ reuses C pattern for function_definition (declarator → identifier)
+        declarator = node.child_by_field_name("declarator")
+        if declarator:
+            name_node = declarator.child_by_field_name("declarator")
+            if name_node:
+                return name_node.text.decode("utf-8")
+            for child in declarator.children:
+                if child.type == "identifier":
+                    return child.text.decode("utf-8")
+                if child.type == "qualified_identifier":
+                    # e.g., Foo::bar
+                    parts = [c.text.decode("utf-8") for c in child.children if c.type == "identifier"]
+                    return "::".join(parts) if parts else child.text.decode("utf-8")
+        # template_declaration: drill through to inner declaration's name
+        if node.type == "template_declaration":
+            for child in node.children:
+                if child.type != "template_parameter_list":
+                    inner_name = _extract_node_name(child, source_bytes, language)
+                    if inner_name and not inner_name.startswith("template"):
+                        return inner_name
+        # class/struct/enum/namespace: name field
+        name_node = node.child_by_field_name("name")
+        if name_node:
+            return name_node.text.decode("utf-8")
+        # constructor/destructor: name is in declarator
+        if node.type in ("constructor_definition", "destructor_definition"):
+            declarator = node.child_by_field_name("declarator")
+            if declarator:
+                return declarator.text.decode("utf-8")
+
+    elif language in (Language.TYPESCRIPT, Language.TSX):
+        name_node = node.child_by_field_name("name")
+        if name_node:
+            return name_node.text.decode("utf-8")
+        # arrow_function or lexical_declaration with arrow: extract variable name
+        if node.type == "lexical_declaration":
+            for child in node.children:
+                if child.type == "variable_declarator":
+                    name_node = child.child_by_field_name("name")
+                    if name_node:
+                        return name_node.text.decode("utf-8")
+
+    elif language == Language.RUST:
+        name_node = node.child_by_field_name("name")
+        if name_node:
+            return name_node.text.decode("utf-8")
+        # impl_item: extract "impl Type" or "impl Trait for Type"
+        if node.type == "impl_item":
+            for child in node.children:
+                if child.type == "type_identifier":
+                    return child.text.decode("utf-8")
+                if child.type == "bounded_type":
+                    # impl Trait for Type — return the Type part
+                    for sub in child.children:
+                        if sub.type == "type_identifier":
+                            return sub.text.decode("utf-8")
+
     # Fallback: first line of content, truncated
     text = node.text.decode("utf-8")
     first_line = text.split("\n")[0].strip()[:50]
@@ -111,8 +169,8 @@ def _walk_chunks(
             )
             chunks.append(chunk)
 
-            # For Python class_definition: recurse into it to find methods
-            if language == Language.PYTHON and child.type == "class_definition":
+            # Recurse into container types to find nested chunks
+            if child.type in config.container_types:
                 chunks.extend(_walk_chunks(
                     child, source_bytes, file_path, language, parent_id=cid,
                 ))

@@ -1,7 +1,7 @@
 """Hybrid search engine combining HNSW vector search with fuzzy keyword matching."""
 
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from rapidfuzz import fuzz
 
@@ -98,16 +98,13 @@ class HybridSearchEngine:
         # Merge candidates from both sources
         all_chunk_ids = set(vector_results.keys()) | set(keyword_results.keys())
 
-        # Build metadata lookup from all sources
+        # Build chunk metadata
         chunk_meta: dict[str, dict] = {}
         for cid in vector_results:
             chunk_meta[cid] = vector_results[cid]
-
-        # For keyword-only results not in vector results, get metadata from keyword chunks
-        if kw_weight > 0:
-            for c in chunks_for_keyword:
-                if c["id"] not in chunk_meta:
-                    chunk_meta[c["id"]] = c
+        for c in chunks_for_keyword:
+            if c["id"] not in chunk_meta:
+                chunk_meta[c["id"]] = c
 
         # Build search results with combined scores
         results: list[SearchResult] = []

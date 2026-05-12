@@ -9,9 +9,16 @@ from glma.models import Language
 # Map of file extension → Language
 EXTENSION_MAP: dict[str, Language] = {
     ".c": Language.C,
-    ".h": Language.C,
+    ".h": Language.CPP,
+    ".cpp": Language.CPP,
+    ".hpp": Language.CPP,
+    ".cc": Language.CPP,
+    ".hxx": Language.CPP,
     ".py": Language.PYTHON,
     ".pyw": Language.PYTHON,
+    ".ts": Language.TYPESCRIPT,
+    ".tsx": Language.TSX,
+    ".rs": Language.RUST,
 }
 
 

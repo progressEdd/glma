@@ -118,3 +118,89 @@ class TestEdgeCases:
         src = tmp_path / "nonexistent.py"
         chunks = extract_chunks(src, Language.PYTHON, tmp_path)
         assert chunks == []
+
+
+class TestCppChunkExtraction:
+    @pytest.fixture
+    def cpp_chunks(self, tmp_path):
+        src = tmp_path / "sample.cpp"
+        src.write_text((FIXTURES / "sample.cpp").read_text())
+        return extract_chunks(src, Language.CPP, tmp_path)
+
+    def test_finds_add_function(self, cpp_chunks):
+        names = [c.name for c in cpp_chunks]
+        assert "add" in names
+
+    def test_finds_class(self, cpp_chunks):
+        classes = [c for c in cpp_chunks if c.chunk_type == ChunkType.CLASS]
+        class_names = [c.name for c in classes]
+        assert "Shape" in class_names
+
+    def test_finds_struct(self, cpp_chunks):
+        classes = [c for c in cpp_chunks if c.chunk_type == ChunkType.CLASS]
+        class_names = [c.name for c in classes]
+        assert "Point" in class_names
+
+    def test_finds_namespace(self, cpp_chunks):
+        classes = [c for c in cpp_chunks if c.chunk_type == ChunkType.CLASS]
+        class_names = [c.name for c in classes]
+        assert "MyApp" in class_names
+
+
+class TestTypescriptChunkExtraction:
+    @pytest.fixture
+    def ts_chunks(self, tmp_path):
+        src = tmp_path / "sample.ts"
+        src.write_text((FIXTURES / "sample.ts").read_text())
+        return extract_chunks(src, Language.TYPESCRIPT, tmp_path)
+
+    def test_finds_function(self, ts_chunks):
+        names = [c.name for c in ts_chunks]
+        assert "greet" in names
+
+    def test_finds_class(self, ts_chunks):
+        classes = [c for c in ts_chunks if c.chunk_type == ChunkType.CLASS]
+        class_names = [c.name for c in classes]
+        assert "Circle" in class_names
+
+    def test_finds_interface(self, ts_chunks):
+        classes = [c for c in ts_chunks if c.chunk_type == ChunkType.CLASS]
+        class_names = [c.name for c in classes]
+        assert "Shape" in class_names
+
+    def test_finds_enum(self, ts_chunks):
+        classes = [c for c in ts_chunks if c.chunk_type == ChunkType.CLASS]
+        class_names = [c.name for c in classes]
+        assert "Color" in class_names
+
+    def test_finds_type_alias(self, ts_chunks):
+        classes = [c for c in ts_chunks if c.chunk_type == ChunkType.CLASS]
+        class_names = [c.name for c in classes]
+        assert "Point" in class_names
+
+
+class TestRustChunkExtraction:
+    @pytest.fixture
+    def rs_chunks(self, tmp_path):
+        src = tmp_path / "sample.rs"
+        src.write_text((FIXTURES / "sample.rs").read_text())
+        return extract_chunks(src, Language.RUST, tmp_path)
+
+    def test_finds_main_function(self, rs_chunks):
+        names = [c.name for c in rs_chunks]
+        assert "main" in names
+
+    def test_finds_struct(self, rs_chunks):
+        classes = [c for c in rs_chunks if c.chunk_type == ChunkType.CLASS]
+        class_names = [c.name for c in classes]
+        assert "Point" in class_names
+
+    def test_finds_enum(self, rs_chunks):
+        classes = [c for c in rs_chunks if c.chunk_type == ChunkType.CLASS]
+        class_names = [c.name for c in classes]
+        assert "Shape" in class_names
+
+    def test_finds_trait(self, rs_chunks):
+        classes = [c for c in rs_chunks if c.chunk_type == ChunkType.CLASS]
+        class_names = [c.name for c in classes]
+        assert "Describe" in class_names

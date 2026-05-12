@@ -55,6 +55,18 @@ class TestParserConfigs:
     def test_python_config_exists(self):
         assert Language.PYTHON in PARSER_CONFIGS
 
+    def test_cpp_config_exists(self):
+        assert Language.CPP in PARSER_CONFIGS
+
+    def test_typescript_config_exists(self):
+        assert Language.TYPESCRIPT in PARSER_CONFIGS
+
+    def test_tsx_config_exists(self):
+        assert Language.TSX in PARSER_CONFIGS
+
+    def test_rust_config_exists(self):
+        assert Language.RUST in PARSER_CONFIGS
+
     def test_c_chunk_types(self):
         config = PARSER_CONFIGS[Language.C]
         assert "function_definition" in config.chunk_types
@@ -64,3 +76,55 @@ class TestParserConfigs:
         config = PARSER_CONFIGS[Language.PYTHON]
         assert "function_definition" in config.chunk_types
         assert "class_definition" in config.chunk_types
+
+
+class TestCppParsing:
+    def test_parse_sample_cpp(self):
+        root = get_root_node(FIXTURES / "sample.cpp", Language.CPP)
+        assert root is not None
+        assert root.type == "translation_unit"
+        assert len(root.children) > 0
+
+    def test_cpp_has_functions(self):
+        root = get_root_node(FIXTURES / "sample.cpp", Language.CPP)
+        # Functions are nested inside namespace_definition
+        all_types = []
+        def collect_types(node):
+            all_types.append(node.type)
+            for child in node.children:
+                collect_types(child)
+        collect_types(root)
+        assert "function_definition" in all_types
+
+
+class TestTypescriptParsing:
+    def test_parse_sample_ts(self):
+        root = get_root_node(FIXTURES / "sample.ts", Language.TYPESCRIPT)
+        assert root is not None
+        assert root.type == "program"
+        assert len(root.children) > 0
+
+    def test_ts_has_classes(self):
+        root = get_root_node(FIXTURES / "sample.ts", Language.TYPESCRIPT)
+        types = [c.type for c in root.children if c.is_named]
+        assert "class_declaration" in types
+
+
+class TestTsxParsing:
+    def test_parse_sample_tsx(self):
+        root = get_root_node(FIXTURES / "sample.tsx", Language.TSX)
+        assert root is not None
+        assert root.type == "program"
+
+
+class TestRustParsing:
+    def test_parse_sample_rs(self):
+        root = get_root_node(FIXTURES / "sample.rs", Language.RUST)
+        assert root is not None
+        assert root.type == "source_file"
+        assert len(root.children) > 0
+
+    def test_rust_has_functions(self):
+        root = get_root_node(FIXTURES / "sample.rs", Language.RUST)
+        types = [c.type for c in root.children if c.is_named]
+        assert "function_item" in types

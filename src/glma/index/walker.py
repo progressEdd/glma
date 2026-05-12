@@ -28,8 +28,11 @@ def walk_source_files(
     """
     if supported_extensions is None:
         supported_extensions = {
-            ".c": "c", ".h": "c",
+            ".c": "c", ".h": "cpp",
+            ".cpp": "cpp", ".hpp": "cpp", ".cc": "cpp", ".hxx": "cpp",
             ".py": "python", ".pyw": "python",
+            ".ts": "typescript", ".tsx": "tsx",
+            ".rs": "rust",
         }
 
     exclude_dirs = set(config.exclude)

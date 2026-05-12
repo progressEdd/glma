@@ -22,7 +22,7 @@ class TestDefaultConfig:
 
     def test_defaults_applied(self, tmp_path):
         cfg = load_config(tmp_path)
-        assert cfg.languages == [Language.C, Language.PYTHON]
+        assert cfg.languages == [Language.C, Language.CPP, Language.TYPESCRIPT, Language.TSX, Language.RUST, Language.PYTHON]
         assert cfg.output_dir == ".glma-index"
         assert cfg.quiet is False
         assert ".git" in cfg.exclude
@@ -85,7 +85,7 @@ class TestInvalidConfig:
     def test_invalid_language(self, tmp_path):
         (tmp_path / ".glma-index").mkdir(exist_ok=True)
         config_file = tmp_path / ".glma-index" / ".glma.toml"
-        config_file.write_text('[index]\nlanguages = ["rust"]\n')
+        config_file.write_text('[index]\nlanguages = ["fortran"]\n')
         with pytest.raises(Exception):
             load_config(tmp_path)
 

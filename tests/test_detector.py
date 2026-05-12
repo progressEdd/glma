@@ -10,8 +10,8 @@ class TestDetectLanguage:
     def test_c_file(self):
         assert detect_language(Path("foo.c")) == Language.C
 
-    def test_h_file(self):
-        assert detect_language(Path("foo.h")) == Language.C
+    def test_h_file_is_cpp(self):
+        assert detect_language(Path("foo.h")) == Language.CPP
 
     def test_python_file(self):
         assert detect_language(Path("foo.py")) == Language.PYTHON
@@ -20,10 +20,31 @@ class TestDetectLanguage:
         assert detect_language(Path("foo.pyw")) == Language.PYTHON
 
     def test_unknown_extension(self):
-        assert detect_language(Path("foo.rs")) is None
+        assert detect_language(Path("foo.java")) is None
 
     def test_case_insensitive(self):
         assert detect_language(Path("FOO.PY")) == Language.PYTHON
 
     def test_no_extension(self):
         assert detect_language(Path("Makefile")) is None
+
+    def test_cpp_file(self):
+        assert detect_language(Path("foo.cpp")) == Language.CPP
+
+    def test_hpp_file(self):
+        assert detect_language(Path("foo.hpp")) == Language.CPP
+
+    def test_cc_file(self):
+        assert detect_language(Path("foo.cc")) == Language.CPP
+
+    def test_hxx_file(self):
+        assert detect_language(Path("foo.hxx")) == Language.CPP
+
+    def test_typescript_file(self):
+        assert detect_language(Path("foo.ts")) == Language.TYPESCRIPT
+
+    def test_tsx_file(self):
+        assert detect_language(Path("foo.tsx")) == Language.TSX
+
+    def test_rust_file(self):
+        assert detect_language(Path("foo.rs")) == Language.RUST

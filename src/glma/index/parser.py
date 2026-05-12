@@ -5,6 +5,9 @@ from pathlib import Path
 from typing import Optional
 
 import tree_sitter_c as tsc
+import tree_sitter_cpp as tscpp
+import tree_sitter_typescript as tsts
+import tree_sitter_rust as tsrust
 import tree_sitter_python as tspython
 from tree_sitter import Language as TSLanguage
 from tree_sitter import Node, Parser, Tree
@@ -57,6 +60,78 @@ def _build_parsers() -> dict[Language, LanguageConfig]:
             call_node_type="call",
             import_node_type="import_statement",
             inherit_node_type="class_definition",
+        ),
+        Language.CPP: LanguageConfig(
+            language=Language.CPP,
+            ts_language=TSLanguage(tscpp.language()),
+            chunk_types={
+                "function_definition": "function",
+                "class_specifier": "class",
+                "struct_specifier": "class",
+                "enum_specifier": "class",
+                "type_definition": "class",
+                "namespace_definition": "class",
+                "template_declaration": "function",
+                "constructor_definition": "function",
+                "destructor_definition": "function",
+            },
+            container_types={"translation_unit", "namespace_definition", "class_specifier"},
+            call_node_type="call_expression",
+            import_node_type="preproc_include",
+            inherit_node_type="class_specifier",
+        ),
+        Language.TYPESCRIPT: LanguageConfig(
+            language=Language.TYPESCRIPT,
+            ts_language=TSLanguage(tsts.language_typescript()),
+            chunk_types={
+                "function_declaration": "function",
+                "class_declaration": "class",
+                "interface_declaration": "class",
+                "type_alias_declaration": "class",
+                "enum_declaration": "class",
+                "method_definition": "method",
+                "arrow_function": "function",
+                "lexical_declaration": "function",
+            },
+            container_types={"program", "class_declaration", "module"},
+            call_node_type="call_expression",
+            import_node_type="import_statement",
+            inherit_node_type="class_declaration",
+        ),
+        Language.TSX: LanguageConfig(
+            language=Language.TSX,
+            ts_language=TSLanguage(tsts.language_tsx()),
+            chunk_types={
+                "function_declaration": "function",
+                "class_declaration": "class",
+                "interface_declaration": "class",
+                "type_alias_declaration": "class",
+                "enum_declaration": "class",
+                "method_definition": "method",
+                "arrow_function": "function",
+                "lexical_declaration": "function",
+            },
+            container_types={"program", "class_declaration", "module"},
+            call_node_type="call_expression",
+            import_node_type="import_statement",
+            inherit_node_type="class_declaration",
+        ),
+        Language.RUST: LanguageConfig(
+            language=Language.RUST,
+            ts_language=TSLanguage(tsrust.language()),
+            chunk_types={
+                "function_item": "function",
+                "struct_item": "class",
+                "enum_item": "class",
+                "trait_item": "class",
+                "type_item": "class",
+                "impl_item": "class",
+                "function_signature_item": "function",
+            },
+            container_types={"source_file", "impl_item", "trait_item"},
+            call_node_type="call_expression",
+            import_node_type="use_declaration",
+            inherit_node_type="impl_item",
         ),
     }
 
