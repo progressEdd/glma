@@ -1,11 +1,16 @@
 """Summarization pipeline for processing chunks through a provider."""
 
+from __future__ import annotations
+
 import logging
 import re
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol
 
 from glma.db.ladybug_store import LadybugStore
 from glma.models import Chunk
+
+if TYPE_CHECKING:
+    from glma.index.progress import SummarizeProgress
 
 logger = logging.getLogger(__name__)
 
@@ -166,11 +171,27 @@ def _decompose_class_chunk(
         except Exception as e:
             logger.warning("Failed to summarize method %s during class decomposition: %s", child.id, e)
 
-    if not method_summaries:
-        return None
-
     # Step 2: Extract class header
     class_header = _extract_class_header(chunk.content)
+
+    if not method_summaries:
+        # Fallback: summarize just the class header (docstring, decorators, class vars)
+        if class_header.strip():
+            logger.info(
+                "All method summaries failed for %s. Falling back to class header summary.",
+                chunk.id,
+            )
+            try:
+                header_context = (
+                    f"File: {chunk.file_path}\n"
+                    f"Chunk: {chunk.name} (class)\n"
+                    f"Lines: {chunk.start_line}-{chunk.end_line}\n"
+                    f"NOTE: Only the class header is available (methods were too large to summarize)."
+                )
+                return provider.summarize(class_header, header_context)
+            except Exception:
+                return None
+        return None
 
     # Step 3: Compose class summary from header + method summaries
     combined_input = f"Class header:\n```\n{class_header}\n```\n\nMethod summaries:\n" + "\n".join(f"- {ms}" for ms in method_summaries)
@@ -192,6 +213,7 @@ def summarize_chunks(
     chunks: list[Chunk],
     provider: Protocol,
     max_chunk_chars: int = 3000,
+    progress: Optional[SummarizeProgress] = None,
 ) -> list[Chunk]:
     """Process chunks, generate AI summaries, and persist to database.
 
@@ -227,6 +249,8 @@ def summarize_chunks(
         # Skip chunks that already have a summary (incremental)
         if chunk.summary:
             skipped_count += 1
+            if progress:
+                progress.advance(chunk.file_path, chunk.name, "skipped")
             updated.append(chunk)
             continue
 
@@ -248,9 +272,13 @@ def summarize_chunks(
                 store.update_chunk_summary(chunk.id, summary)
                 chunk.summary = summary
                 summarized_count += 1
+                if progress:
+                    progress.advance(chunk.file_path, chunk.name, "done")
             else:
                 logger.warning("Provider returned empty summary for chunk %s", chunk.id)
                 failed_count += 1
+                if progress:
+                    progress.advance(chunk.file_path, chunk.name, "failed")
         except Exception as e:
             # Check if this is a context-length error we can decompose
             if _is_context_length_error(e):
@@ -266,12 +294,18 @@ def summarize_chunks(
                     chunk.summary = summary
                     decomposed_count += 1
                     logger.info("Decomposition succeeded for chunk %s", chunk.id)
+                    if progress:
+                        progress.advance(chunk.file_path, chunk.name, "done")
                 else:
                     logger.warning("Decomposition also failed for chunk %s. Skipping.", chunk.id)
                     failed_count += 1
+                    if progress:
+                        progress.advance(chunk.file_path, chunk.name, "failed")
             else:
                 logger.warning("Summarization failed for chunk %s: %s", chunk.id, e)
                 failed_count += 1
+                if progress:
+                    progress.advance(chunk.file_path, chunk.name, "failed")
 
         updated.append(chunk)
 
@@ -279,6 +313,13 @@ def summarize_chunks(
         "Summarization complete: %d summarized, %d decomposed, %d skipped, %d failed",
         summarized_count, decomposed_count, skipped_count, failed_count,
     )
+    if progress:
+        progress.print_summary(
+            summarized=summarized_count,
+            decomposed=decomposed_count,
+            skipped=skipped_count,
+            failed=failed_count,
+        )
     return updated
 
 
