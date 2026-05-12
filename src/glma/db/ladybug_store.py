@@ -11,7 +11,12 @@ from glma.models import Chunk, ChunkType, FileRecord, Language, Relationship
 class LadybugStore:
     """Manages the Ladybug database for glma index storage."""
 
-    SCHEMA_CHUNKS = """
+    # Default vector dimensions — overridden by constructor param when available
+    DEFAULT_VECTOR_DIMS = 768
+
+    @staticmethod
+    def _build_chunk_schema(dims: int) -> str:
+        return f"""
     CREATE NODE TABLE IF NOT EXISTS Chunk (
         id STRING,
         file_path STRING,
@@ -23,7 +28,7 @@ class LadybugStore:
         end_line INT64,
         content_hash STRING,
         parent_id STRING,
-        embedding FLOAT[768],
+        embedding FLOAT[{dims}],
         summary_hash STRING,
         vector_dimensions INT64,
         PRIMARY KEY (id)
@@ -38,6 +43,7 @@ class LadybugStore:
         last_indexed STRING,
         chunk_count INT64,
         file_summary STRING,
+        pipeline_stage STRING,
         PRIMARY KEY (path)
     )
     """
@@ -50,12 +56,15 @@ class LadybugStore:
     CREATE REL TABLE IF NOT EXISTS RELATES_TO (FROM Chunk TO Chunk, rel_type STRING, confidence STRING, source_line INT64, target_name STRING)
     """
 
-    def __init__(self, db_path: Path):
+    def __init__(self, db_path: Path, vector_dimensions: int = 0):
         """Initialize store, creating/opening the database and ensuring schema exists.
 
         Args:
             db_path: Path to the database file. Parent directory will be created if needed.
+            vector_dimensions: Expected embedding vector dimensions. If 0 (default),
+                uses DEFAULT_VECTOR_DIMS (768). Used to build the schema correctly.
         """
+        self._vector_dims = vector_dimensions if vector_dimensions > 0 else self.DEFAULT_VECTOR_DIMS
         db_path.parent.mkdir(parents=True, exist_ok=True)
         self.db = Database(str(db_path))
         self.conn = Connection(self.db)
@@ -64,17 +73,134 @@ class LadybugStore:
 
     def _init_schema(self) -> None:
         """Create tables if they don't exist."""
-        self.conn.execute(self.SCHEMA_CHUNKS)
+        schema_chunks = self._build_chunk_schema(self._vector_dims)
+        try:
+            self.conn.execute(schema_chunks)
+        except Exception:
+            pass  # Table already exists
+
+        # Always check if existing table has matching dimensions
+        self._rebuild_chunk_table_if_needed()
+
         self.conn.execute(self.SCHEMA_FILES)
         self.conn.execute(self.SCHEMA_CONTAINS)
         self.conn.execute(self.SCHEMA_RELATES_TO)
 
+    def _rebuild_chunk_table_if_needed(self) -> None:
+        """Check if the Chunk table has the wrong embedding dimensions and rebuild it."""
+        try:
+            # Try to detect the schema's array dimension via Kuzu's table info
+            result = self.conn.execute("CALL TABLE_INFO('Chunk') RETURN *")
+            for row in result:
+                # row: [col_id, name, type, primary_key, ...
+                col_name = row[1]
+                col_type = row[2]
+                if col_name == 'embedding' and 'FLOAT' in str(col_type):
+                    # Extract dimension from type string like "FLOAT[768]"
+                    import re
+                    match = re.search(r'FLOAT\[(\d+)\]', str(col_type))
+                    if match:
+                        existing_dims = int(match.group(1))
+                        if existing_dims != self._vector_dims:
+                            import logging
+                            logger = logging.getLogger(__name__)
+                            logger.info(
+                                "Rebuilding Chunk table: dimension mismatch (schema=%d, config=%d). "
+                                "Existing embeddings will be cleared.",
+                                existing_dims, self._vector_dims,
+                            )
+                            self._rebuild_chunk_table()
+                    return
+        except Exception:
+            pass  # Can't inspect schema — try to proceed
+
+    def _rebuild_chunk_table(self) -> None:
+        """Drop and recreate the Chunk table with the correct vector dimensions.
+
+        Preserves all chunk data except embeddings (which must be regenerated).
+        Also rebuilds CONTAINS edges from File→Chunk relationships.
+        """
+        import logging
+        logger = logging.getLogger(__name__)
+
+        # Preserve chunk data (minus embeddings)
+        rows = []
+        try:
+            result = self.conn.execute("""MATCH (c:Chunk)
+                RETURN c.id, c.file_path, c.chunk_type, c.name, c.content, c.summary,
+                       c.start_line, c.end_line, c.content_hash, c.parent_id""")
+            rows = list(result)
+            logger.info("Preserved %d chunks for re-insertion.", len(rows))
+        except Exception as e:
+            logger.warning("Failed to preserve chunk data during rebuild: %s", e)
+
+        # Drop relationship tables that reference Chunk (must drop before Chunk)
+        for rel_table in ["RELATES_TO", "CONTAINS"]:
+            try:
+                self.conn.execute(f"DROP TABLE {rel_table}")
+            except Exception:
+                pass
+
+        # Drop existing Chunk table
+        try:
+            self.conn.execute("DROP TABLE Chunk")
+        except Exception:
+            # Fallback: detach-delete nodes then retry
+            try:
+                self.conn.execute("MATCH (c:Chunk) DETACH DELETE c")
+            except Exception:
+                pass
+            self.conn.execute("DROP TABLE Chunk")
+
+        # Recreate Chunk table with correct dimensions
+        schema_chunks = self._build_chunk_schema(self._vector_dims)
+        self.conn.execute(schema_chunks)
+
+        # Recreate CONTAINS
+        self.conn.execute(self.SCHEMA_CONTAINS)
+
+        # Re-insert preserved data
+        inserted = 0
+        for row in rows:
+            try:
+                self.conn.execute(
+                    """CREATE (c:Chunk {
+                        id: $id, file_path: $fp, chunk_type: $ct, name: $name,
+                        content: $content, summary: $summary,
+                        start_line: $sl, end_line: $el, content_hash: $ch,
+                        parent_id: $pid, summary_hash: '', vector_dimensions: 0
+                    })""",
+                    {"id": row[0], "fp": row[1], "ct": row[2], "name": row[3],
+                     "content": row[4], "summary": row[5] or "", "sl": row[6], "el": row[7],
+                     "ch": row[8], "pid": row[9] or ""},
+                )
+                inserted += 1
+            except Exception as e:
+                logger.warning("Failed to re-insert chunk %s: %s", row[0], e)
+
+        # Rebuild CONTAINS edges
+        if inserted > 0:
+            try:
+                self.conn.execute(
+                    """MATCH (f:File), (c:Chunk)
+                    WHERE f.path = c.file_path
+                    CREATE (f)-[:CONTAINS]->(c)"""
+                )
+            except Exception as e:
+                logger.warning("Failed to rebuild CONTAINS edges: %s", e)
+
+        logger.info(
+            "Chunk table rebuilt: %d/%d chunks preserved (embeddings cleared, summaries kept).",
+            inserted, len(rows),
+        )
+
     def _migrate_schema(self) -> None:
         """Add embedding columns to Chunk table if they don't exist (migration for existing databases)."""
         migrations = [
-            "ALTER TABLE Chunk ADD embedding FLOAT[768]",
+            f"ALTER TABLE Chunk ADD embedding FLOAT[{self._vector_dims}]",
             "ALTER TABLE Chunk ADD summary_hash STRING",
             "ALTER TABLE Chunk ADD vector_dimensions INT64",
+            "ALTER TABLE File ADD pipeline_stage STRING",
         ]
         for sql in migrations:
             try:
@@ -97,6 +223,7 @@ class LadybugStore:
         data = record.model_dump()
         data["language"] = data["language"].value  # Serialize enum to string
         data["file_summary"] = data.get("file_summary") or ""
+        data["pipeline_stage"] = data.get("pipeline_stage", "discovered")
         self.conn.execute(
             """CREATE (f:File {
                 path: $path,
@@ -104,7 +231,8 @@ class LadybugStore:
                 content_hash: $content_hash,
                 last_indexed: $last_indexed,
                 chunk_count: $chunk_count,
-                file_summary: $file_summary
+                file_summary: $file_summary,
+                pipeline_stage: $pipeline_stage
             })""",
             data,
         )
@@ -229,6 +357,33 @@ class LadybugStore:
             {"fp": file_path, "summary": summary},
         )
 
+    def set_pipeline_stage(self, file_path: str, stage: str) -> None:
+        """Update the pipeline_stage property of a file node.
+
+        Args:
+            file_path: Relative file path.
+            stage: Pipeline stage (discovered, chunked, relationships_extracted, complete).
+        """
+        self.conn.execute(
+            "MATCH (f:File {path: $fp}) SET f.pipeline_stage = $stage",
+            {"fp": file_path, "stage": stage},
+        )
+
+    def get_incomplete_files(self) -> list[tuple[str, str]]:
+        """Get files that haven't completed the pipeline.
+
+        Returns:
+            List of (file_path, pipeline_stage) tuples for files where stage != 'complete',
+            ordered by file path.
+        """
+        result = self.conn.execute(
+            """MATCH (f:File)
+            WHERE f.pipeline_stage IS NULL OR f.pipeline_stage <> 'complete'
+            RETURN f.path, f.pipeline_stage
+            ORDER BY f.path"""
+        )
+        return [(row[0], row[1] or "discovered") for row in result]
+
     def delete_relationships(self, file_path: str) -> None:
         """Delete all outgoing relationships from a file's chunks."""
         self.conn.execute(
@@ -313,7 +468,7 @@ class LadybugStore:
     def get_file_record(self, file_path: str) -> Optional[FileRecord]:
         """Get a file record by path, or None if not indexed."""
         result = self.conn.execute(
-            "MATCH (f:File {path: $path}) RETURN f.path, f.language, f.content_hash, f.last_indexed, f.chunk_count, f.file_summary",
+            "MATCH (f:File {path: $path}) RETURN f.path, f.language, f.content_hash, f.last_indexed, f.chunk_count, f.file_summary, f.pipeline_stage",
             {"path": file_path},
         )
         rows = list(result)
@@ -327,6 +482,7 @@ class LadybugStore:
             last_indexed=row[3],
             chunk_count=row[4],
             file_summary=row[5] or None,
+            pipeline_stage=row[6] if row[6] else "discovered",
         )
 
     def get_chunks_for_file(self, file_path: str) -> list[Chunk]:
@@ -548,15 +704,17 @@ class LadybugStore:
         self.conn.execute("INSTALL vector;")
         self.conn.execute("LOAD vector;")
 
-    def create_vector_index(self, dimensions: int = 768) -> None:
+    def create_vector_index(self, dimensions: int = 0) -> None:
         """Create or recreate the HNSW vector index on chunk embeddings.
 
         Drops existing index first to handle staleness after re-embedding.
         Idempotent — safe to call multiple times.
 
         Args:
-            dimensions: Embedding vector dimensions (for future use / validation).
+            dimensions: Embedding vector dimensions. If 0, uses instance default.
         """
+        dims = dimensions if dimensions > 0 else self._vector_dims
+        _ = dims  # Currently unused beyond validation, kept for API compat
         self.ensure_vector_extension()
         # Drop existing index if it exists
         try:

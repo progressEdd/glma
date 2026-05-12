@@ -47,6 +47,7 @@ class FileRecord(BaseModel):
     last_indexed: str = Field(..., description="ISO 8601 timestamp")
     chunk_count: int = Field(default=0)
     file_summary: Optional[str] = Field(default=None, description="LLM-generated file-level summary")
+    pipeline_stage: str = Field(default="discovered", description="Pipeline stage: discovered, chunked, relationships_extracted, complete")
 
 
 class RelType(str, Enum):
