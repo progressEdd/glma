@@ -1,5 +1,7 @@
 ---
-status: investigating
+status: partial
+resolved_part1: 2026-04-10
+resolved_part2: still open — notebook cells not yet wired into summarization pipeline
 trigger: "develop-compacted.md includes full codeblocks instead of hiding them by default; no AI summaries for notebook cells"
 created: 2026-04-10T23:37:00.000Z
 updated: 2026-04-10T23:37:00.000Z
