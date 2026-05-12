@@ -2,13 +2,13 @@
 gsd_state_version: 1.0
 milestone: v1.4
 milestone_name: milestone
-status: Ready to plan
-last_updated: "2026-05-12T16:30:53.630Z"
+status: Milestone complete
+last_updated: "2026-05-12T18:12:17.734Z"
 progress:
-  total_phases: 16
-  completed_phases: 15
-  total_plans: 27
-  completed_plans: 35
+  total_phases: 17
+  completed_phases: 17
+  total_plans: 29
+  completed_plans: 36
 ---
 
 # STATE — v1.4 Hardening & Expansion
@@ -20,17 +20,16 @@ progress:
 | Field | Value |
 |-------|-------|
 | **Milestone** | v1.4 — Hardening & Expansion |
-| **Phase** | 17 — Config Relocation |
-| **Status** | Context gathered, ready to plan |
-| **Next Action** | Plan Phase 17 |
+| **Phase** | 17 — Config Relocation (Complete) |
+| **Status** | Phase verified, all criteria passed |
+| **Next Action** | Plan Phase 18 — Extended Language Support |
 
 ## Phase Progress
 
 | Phase | Name | Status | Requirements |
 |-------|------|--------|-------------|
 | 16 | Pipeline Reliability | Complete | PIPE-01 through PIPE-06 |
-| 17 | Config Relocation | Context gathered | CONF-01 |
-| 17 | Config Relocation | Not started | CONF-01 |
+| 17 | Config Relocation | Complete | CONF-01 |
 | 18 | Extended Language Support | Not started | LANG-01 through LANG-06 |
 | 19 | LLM Query Rewriting | Not started | REWR-01 through REWR-06 |
 | 20 | 3-Way Hybrid Search | Not started | HYBR-01 through HYBR-06 |
@@ -49,8 +48,10 @@ None.
 ## Notes
 
 - Phase 16 executed all 6 plans across 3 waves, 393 tests passing
+- Phase 17 executed 1 plan (config relocation), 398 tests passing
 - Chunk ID format change is backward-incompatible — existing databases must be re-indexed
 - Pipeline resume works: files at 'chunked' stage join Pass 2, 'relationships_extracted' join Pass 3
+- Config auto-migration: root `.glma.toml` → `.glma-index/.glma.toml` with Rich notice
 
 ---
 *State initialized: 2026-05-12*
