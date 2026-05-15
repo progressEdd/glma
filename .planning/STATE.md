@@ -3,7 +3,7 @@ gsd_state_version: 1.0
 milestone: v1.4
 milestone_name: milestone
 status: Milestone complete
-last_updated: "2026-05-13T02:49:30.128Z"
+last_updated: "2026-05-13T03:04:47.562Z"
 progress:
   total_phases: 20
   completed_phases: 20
@@ -13,7 +13,16 @@ progress:
 
 # STATE — v1.4 Hardening & Expansion
 
-**Updated:** 2026-05-12
+**Updated:** 2026-05-15
+
+### Pending Todos
+
+| # | Title | Area |
+|---|-------|------|
+| 1 | Add relationship extraction progress display | cli |
+| 2 | Add separate glma summarize CLI command with --force --clear flag | cli |
+| 3 | Print model name in summarization progress output | cli |
+| 4 | Check endpoint model loaded before summarization | cli |
 
 ## Current Position
 
