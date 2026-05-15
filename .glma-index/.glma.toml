@@ -1,0 +1,21 @@
+[index]
+languages = ["python"]
+output_dir = ".glma-index"
+
+[summarize]
+enabled = true
+provider = "local"
+base_url = "http://localhost:1234/v1"
+model = "unsloth/gemma-4-E4B-it-GGUF"
+max_chunk_chars = 1500
+
+[search]
+enabled = true
+embedding_provider = "embed-lmstudio"
+embedding_model = "text-embedding-qwen3-embedding-0.6b"
+embedding_base_url = "http://localhost:1234/v1"
+vector_dimensions = 1024
+similarity_threshold = 0.5
+hybrid_keyword_weight = 0.3
+hybrid_vector_weight = 0.3
+graph_weight = 0.4

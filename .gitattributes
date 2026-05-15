@@ -1,0 +1,2 @@
+*.lbug filter=lfs diff=lfs merge=lfs -text
+*.ibug filter=lfs diff=lfs merge=lfs -text
