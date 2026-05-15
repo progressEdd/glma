@@ -13,7 +13,7 @@ progress:
 
 # STATE — v1.4 Hardening & Expansion
 
-**Updated:** 2026-05-15
+**Updated:** 2026-05-15 (todos updated)
 
 ### Pending Todos
 
@@ -23,6 +23,7 @@ progress:
 | 2 | Add separate glma summarize CLI command with --force --clear flag | cli |
 | 3 | Print model name in summarization progress output | cli |
 | 4 | Check endpoint model loaded before summarization | cli |
+| 5 | Save search quality root cause analysis to planning folder | planning |
 
 ## Current Position
 
